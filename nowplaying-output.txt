@@ -1,0 +1,49 @@
+=== Calibrate Now Playing diagnostic === 
+Generated: Sun 05/10/2026 22:59:27.97 
+Script: C:\Users\sanke\Desktop\mood-eq\electron\src\nowplaying.ps1 
+ 
+--- Run #1: powershell -Sta -File --- 
+STAGE|||load-winrt-asm
+STAGE|||load-smtc-types
+STAGE|||find-astask
+STAGE|||request-manager
+STAGE|||list-sessions
+DEBUG|||count=1 1|||curr=SpotifyAB.SpotifyMusic_zpdnekdrzrea0!Spotify|||list=Chrome@5,SpotifyAB.SpotifyMusic_zpdnekdrzrea0!Spotify@5
+STAGE|||read-media-properties
+OK|||Talwinder - Wishes (Remake)|||♥ Midnight_SONG_Vibes ♥||||||5|||Chrome
+ 
+--- Run #2: powershell (no -Sta) --- 
+STAGE|||load-winrt-asm
+STAGE|||load-smtc-types
+STAGE|||find-astask
+STAGE|||request-manager
+STAGE|||list-sessions
+DEBUG|||count=1 1|||curr=SpotifyAB.SpotifyMusic_zpdnekdrzrea0!Spotify|||list=Chrome@5,SpotifyAB.SpotifyMusic_zpdnekdrzrea0!Spotify@5
+STAGE|||read-media-properties
+OK|||Talwinder - Wishes (Remake)|||♥ Midnight_SONG_Vibes ♥||||||5|||Chrome
+ 
+--- PowerShell version --- 
+
+Name                           Value                                                                                   
+----                           -----                                                                                   
+PSVersion                      5.1.26100.8115                                                                          
+PSEdition                      Desktop                                                                                 
+PSCompatibleVersions           {1.0, 2.0, 3.0, 4.0...}                                                                 
+BuildVersion                   10.0.26100.8115                                                                         
+CLRVersion                     4.0.30319.42000                                                                         
+WSManStackVersion              3.0                                                                                     
+PSRemotingProtocolVersion      2.3                                                                                     
+SerializationVersion           1.1.0.1                                                                                 
+
+
+
+ 
+--- Detailed session enumeration --- 
+True
+Session count: 1 1
+  - Chrome status=5
+  - SpotifyAB.SpotifyMusic_zpdnekdrzrea0!Spotify status=5
+Current: SpotifyAB.SpotifyMusic_zpdnekdrzrea0!Spotify
+ 
+=== END === 
+ 

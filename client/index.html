@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
+    <title>Calibrate</title>
+    <meta name="description" content="Calibrate — adaptive audio that helps neurodivergent students stay regulated through long work sessions." />
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <link href="https://fonts.cdnfonts.com/css/pp-neue-montreal" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300..700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/assets/index-B-fGQMv3.css">
+    <style>
+      /* ───────── Shared overlay tokens ───────── */
+      .cal-overlay {
+        font-family: 'JetBrains Mono', 'SF Mono', monospace;
+        color: rgba(255, 255, 255, 0.32);
+        font-size: 10px;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        user-select: none;
+      }
+      .cal-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 5px 10px;
+        background: rgba(10, 12, 20, 0.55);
+        backdrop-filter: blur(20px) saturate(1.4);
+        -webkit-backdrop-filter: blur(20px) saturate(1.4);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        border-radius: 999px;
+        cursor: pointer;
+        transition: color 0.25s, border-color 0.25s, background 0.25s;
+        white-space: nowrap;
+      }
+      .cal-pill:hover {
+        color: rgba(255, 255, 255, 0.7);
+        border-color: rgba(255, 255, 255, 0.18);
+      }
+      .cal-pill[data-active="true"] {
+        color: rgba(74, 222, 128, 0.85);
+        border-color: rgba(74, 222, 128, 0.35);
+        background: rgba(74, 222, 128, 0.06);
+      }
+      .cal-dot {
+        width: 5px;
+        height: 5px;
+        border-radius: 50%;
+        background: rgba(74, 222, 128, 0.7);
+        box-shadow: 0 0 6px rgba(74, 222, 128, 0.45);
+        flex-shrink: 0;
+      }
+      .cal-dot--idle { background: rgba(255,255,255,0.3); box-shadow: none; }
+      .cal-dot--err { background: #f0a050; box-shadow: 0 0 6px rgba(240,160,80,0.45); }
+      .cal-panel {
+        position: absolute;
+        right: 0;
+        bottom: calc(100% + 10px);
+        width: 320px;
+        padding: 18px 20px;
+        background: rgba(10, 12, 20, 0.85);
+        backdrop-filter: blur(28px) saturate(1.4);
+        -webkit-backdrop-filter: blur(28px) saturate(1.4);
+        border: 1px solid rgba(255, 255, 255, 0.07);
+        border-radius: 16px;
+        color: rgba(255, 255, 255, 0.62);
+        font-family: 'PP Neue Montreal', -apple-system, BlinkMacSystemFont, sans-serif;
+        font-size: 12px;
+        line-height: 1.6;
+        letter-spacing: normal;
+        text-transform: none;
+        opacity: 0;
+        transform: translateY(6px);
+        pointer-events: none;
+        transition: opacity 0.22s, transform 0.22s;
+        box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5);
+      }
+      [data-open="true"] .cal-panel { opacity: 1; transform: translateY(0); pointer-events: auto; }
+      .cal-panel__title {
+        font-size: 10px;
+        letter-spacing: 0.22em;
+        text-transform: uppercase;
+        color: rgba(255, 255, 255, 0.45);
+        margin: 0 0 10px 0;
+        font-weight: 500;
+      }
+      .cal-panel__lead {
+        color: rgba(255, 255, 255, 0.85);
+        font-style: italic;
+        margin: 0 0 10px 0;
+      }
+      .cal-panel p { margin: 0 0 10px 0; }
+      .cal-panel p:last-child { margin-bottom: 0; }
+      .cal-bullets { margin: 4px 0 0 0; padding: 0; list-style: none; font-size: 11px; }
+      .cal-bullets li { padding: 4px 0 4px 14px; color: rgba(255,255,255,0.5); position: relative; }
+      .cal-bullets li::before { content: "·"; position: absolute; left: 4px; top: 4px; color: rgba(74,222,128,0.6); }
+
+      /* ───────── Bottom-right cluster (privacy + audio + AB) ───────── */
+      .cal-bottom-right {
+        position: fixed;
+        right: 16px;
+        bottom: 14px;
+        z-index: 9999;
+        display: flex;
+        flex-direction: row-reverse;
+        gap: 6px;
+        align-items: center;
+      }
+      .cal-bottom-right > .cal-overlay { position: relative; }
+
+      /* ───────── A/B EQ banner ───────── */
+      .cal-eq-banner {
+        position: fixed;
+        top: 14px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 9999;
+        display: none;
+      }
+      .cal-eq-banner[data-visible="true"] { display: block; }
+
+      /* ───────── Audio capture: levels strip ───────── */
+      .cal-capture-meter {
+        display: flex;
+        align-items: center;
+        gap: 2px;
+        padding: 0 4px;
+      }
+      .cal-capture-meter span {
+        display: inline-block;
+        width: 2px;
+        height: 10px;
+        background: rgba(74,222,128,0.25);
+        border-radius: 1px;
+        transition: height 0.06s linear, background 0.2s;
+      }
+
+      /* ───────── Audio panel buttons ───────── */
+      .cal-btn {
+        display: inline-block;
+        padding: 6px 10px;
+        margin-top: 8px;
+        background: rgba(74,222,128,0.10);
+        color: rgba(74,222,128,0.9);
+        border: 1px solid rgba(74,222,128,0.28);
+        border-radius: 8px;
+        font-family: inherit;
+        font-size: 11px;
+        letter-spacing: 0.06em;
+        cursor: pointer;
+        transition: background 0.2s, border-color 0.2s;
+      }
+      .cal-btn:hover { background: rgba(74,222,128,0.16); border-color: rgba(74,222,128,0.5); }
+      .cal-btn--ghost {
+        background: rgba(255,255,255,0.04);
+        color: rgba(255,255,255,0.6);
+        border-color: rgba(255,255,255,0.1);
+      }
+      .cal-btn--ghost:hover { background: rgba(255,255,255,0.08); }
+      .cal-mode-row { display: flex; gap: 4px; margin-top: 10px; flex-wrap: wrap; }
+      .cal-mode-row button {
+        padding: 4px 8px;
+        font-size: 10px;
+        border-radius: 6px;
+        border: 1px solid rgba(255,255,255,0.08);
+        background: rgba(255,255,255,0.03);
+        color: rgba(255,255,255,0.45);
+        cursor: pointer;
+        font-family: inherit;
+        letter-spacing: 0.04em;
+      }
+      .cal-mode-row button:hover { color: rgba(255,255,255,0.8); border-color: rgba(255,255,255,0.2); }
+      .cal-mode-row button[data-active="true"] {
+        background: rgba(74,222,128,0.15);
+        color: rgba(74,222,128,0.95);
+        border-color: rgba(74,222,128,0.4);
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <!-- Bundle src is rewritten at runtime based on ?eq= query param (see init script) -->
+    <script id="cal-bundle" type="module" src="/assets/index-DsMTLuBT.js"></script>
+
+    <!-- ────────── Top banner: shows which EQ table is active ────────── -->
+    <div class="cal-overlay cal-eq-banner" id="calEqBanner" data-visible="false">
+      <div class="cal-pill" id="calEqBannerPill">
+        <span class="cal-dot"></span>
+        <span id="calEqBannerLabel">EQ: Evidence-based</span>
+      </div>
+    </div>
+
+    <!-- ────────── Bottom-right cluster ────────── -->
+    <div class="cal-bottom-right">
+      <!-- Privacy pill (right-most) -->
+      <div class="cal-overlay" id="calibratePrivacy" data-open="false">
+        <div class="cal-panel" role="dialog" aria-label="Calibrate privacy summary">
+          <p class="cal-panel__title">Privacy</p>
+          <p class="cal-panel__lead">Calibrate knows your rhythm, not your words.</p>
+          <p>All signal processing runs locally in your browser. Keystrokes live in a per-word buffer that's discarded the moment the word resolves — only aggregate metrics persist for the session.</p>
+          <ul class="cal-bullets">
+            <li>No cloud, no account, no telemetry</li>
+            <li>No raw text or audio leaves your machine</li>
+            <li>State is wiped when you close the tab</li>
+          </ul>
+        </div>
+        <button type="button" class="cal-pill" id="calPrivacyBtn">
+          <span class="cal-dot"></span>
+          <span>Local · private</span>
+        </button>
+      </div>
+
+      <!-- Audio capture pill -->
+      <div class="cal-overlay" id="calibrateAudio" data-open="false">
+        <div class="cal-panel" role="dialog" aria-label="Calibrate audio capture">
+          <p class="cal-panel__title">System audio capture</p>
+          <p class="cal-panel__lead" id="calAudioStatus">Listening for a virtual audio device…</p>
+          <p id="calAudioHint">Install <strong>VB-Cable</strong> or <strong>Voicemeeter</strong> and set Calibrate's chosen capture device. After the one-time mic prompt, capture is automatic on every visit.</p>
+          <div id="calAudioControls">
+            <button type="button" class="cal-btn" id="calAudioStart">Start capture</button>
+            <button type="button" class="cal-btn cal-btn--ghost" id="calAudioStop" style="display:none">Disconnect</button>
+            <button type="button" class="cal-btn cal-btn--ghost" id="calAudioRescan">Rescan devices</button>
+          </div>
+          <div class="cal-mode-row" id="calAudioModes">
+            <span style="font-size:10px;color:rgba(255,255,255,0.35);align-self:center;letter-spacing:0.18em">PRESET:</span>
+            <button data-mood="cruising">Cruising</button>
+            <button data-mood="locked">Locked</button>
+            <button data-mood="drift" data-active="true">Drift</button>
+            <button data-mood="restless">Restless</button>
+          </div>
+          <p style="margin-top:10px;font-size:10px;color:rgba(255,255,255,0.3)">EQ tracks whatever preset is active in the EQUALIZER panel.</p>
+        </div>
+        <button type="button" class="cal-pill" id="calAudioBtn">
+          <span class="cal-dot cal-dot--idle" id="calAudioDot"></span>
+          <span id="calAudioPillLabel">Audio: idle</span>
+          <span class="cal-capture-meter" id="calAudioMeter" style="display:none">
+            <span></span><span></span><span></span><span></span><span></span>
+            <span></span><span></span><span></span>
+          </span>
+        </button>
+      </div>
+
+      <!-- A/B EQ toggle pill -->
+      <div class="cal-overlay" id="calibrateAB" data-open="false">
+        <div class="cal-panel" role="dialog" aria-label="EQ A/B test toggle">
+          <p class="cal-panel__title">EQ Comparison</p>
+          <p class="cal-panel__lead">Toggle between the evidence-based EQ presets and the original intuitive ones, for informal A/B testing.</p>
+          <p style="font-size:11px">Currently active: <strong id="calABCurrent">Evidence-based</strong></p>
+          <div style="display:flex;gap:6px;margin-top:10px">
+            <button type="button" class="cal-btn" id="calABEvidence">Evidence-based</button>
+            <button type="button" class="cal-btn cal-btn--ghost" id="calABLegacy">Legacy (intuitive)</button>
+          </div>
+          <p style="margin-top:10px;font-size:10px;color:rgba(255,255,255,0.32)">
+            <strong>Hotkey:</strong> Ctrl+Shift+E (or Cmd+Shift+E)<br>
+            Switching reloads the page with the chosen bundle.
+          </p>
+        </div>
+        <button type="button" class="cal-pill" id="calABBtn">
+          <span class="cal-dot"></span>
+          <span id="calABLabel">EQ: A</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- ────────── Init: bundle selector + privacy popover + AB toggle ────────── -->
+    <script>
+      (function () {
+        // ── 1. Pick which EQ bundle to load based on ?eq= query param ──
+        var params = new URLSearchParams(window.location.search);
+        var eqMode = params.get('eq') === 'legacy' ? 'legacy' : 'evidence';
+        var bundleEl = document.getElementById('cal-bundle');
+        if (eqMode === 'legacy') {
+          bundleEl.setAttribute('src', '/assets/index-DsMTLuBT-legacy.js');
+        }
+
+        // Update AB pill label and current indicator
+        var abLabel = document.getElementById('calABLabel');
+        var abCurrent = document.getElementById('calABCurrent');
+        var abEvBtn = document.getElementById('calABEvidence');
+        var abLegacyBtn = document.getElementById('calABLegacy');
+        var abBanner = document.getElementById('calEqBanner');
+        var abBannerLabel = document.getElementById('calEqBannerLabel');
+
+        if (eqMode === 'legacy') {
+          abLabel.textContent = 'EQ: B';
+          abCurrent.textContent = 'Legacy (intuitive)';
+          abEvBtn.classList.add('cal-btn--ghost');
+          abLegacyBtn.classList.remove('cal-btn--ghost');
+          abBanner.setAttribute('data-visible', 'true');
+          abBannerLabel.textContent = 'EQ: Legacy (intuitive)';
+        } else {
+          abLabel.textContent = 'EQ: A';
+          abCurrent.textContent = 'Evidence-based';
+        }
+
+        // ── 2. Generic popover handler ──
+        function wirePopover(wrap, btn) {
+          var open = false;
+          var setOpen = function (v) {
+            open = v;
+            wrap.setAttribute('data-open', v ? 'true' : 'false');
+            btn.setAttribute('aria-expanded', v ? 'true' : 'false');
+          };
+          btn.addEventListener('click', function (e) {
+            e.stopPropagation();
+            // Close all other popovers
+            document.querySelectorAll('.cal-overlay[data-open="true"]').forEach(function (el) {
+              if (el !== wrap) el.setAttribute('data-open', 'false');
+            });
+            setOpen(!open);
+          });
+          document.addEventListener('click', function (e) {
+            if (open && !wrap.contains(e.target)) setOpen(false);
+          });
+          document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape' && open) setOpen(false);
+          });
+        }
+        wirePopover(document.getElementById('calibratePrivacy'), document.getElementById('calPrivacyBtn'));
+        wirePopover(document.getElementById('calibrateAudio'), document.getElementById('calAudioBtn'));
+        wirePopover(document.getElementById('calibrateAB'), document.getElementById('calABBtn'));
+
+        // ── 3. AB toggle behavior ──
+        function switchTo(mode) {
+          var url = new URL(window.location.href);
+          if (mode === 'legacy') url.searchParams.set('eq', 'legacy');
+          else url.searchParams.delete('eq');
+          window.location.href = url.toString();
+        }
+        abEvBtn.addEventListener('click', function () { switchTo('evidence'); });
+        abLegacyBtn.addEventListener('click', function () { switchTo('legacy'); });
+
+        // Hotkey: Ctrl/Cmd+Shift+E
+        document.addEventListener('keydown', function (e) {
+          if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'E' || e.key === 'e')) {
+            e.preventDefault();
+            switchTo(eqMode === 'legacy' ? 'evidence' : 'legacy');
+          }
+        });
+      })();
+    </script>
+
+    <!-- ────────── Standalone audio capture (independent of React bundle) ────────── -->
+    <script>
+      (function () {
+        // Recognize any virtual loopback OR built-in Stereo Mix
+        var KEYWORDS = [
+          'cable output', 'voicemeeter out', 'voicemeeter output', 'vb-audio',
+          'stereo mix', 'stereomix', 'wave out mix', 'what u hear',
+          'obs virtual', 'nvidia broadcast',
+        ];
+        var EQ_FREQUENCIES = [60, 170, 310, 600, 1000, 3000, 6000, 12000];
+        var Q = 1.4;
+
+        // Mirror the moodEngine MOOD_EQ tables here so capture works without bundle hooks
+        var MOOD_EQ_EVIDENCE = {
+          cruising: [-1, 0, 1, 2, 2, 1, 0, -1],
+          locked:   [-2, -1, 1, 3, 3, 1, -1, -2],
+          drift:    [0, 1, 2, 1, 2, 3, 3, 2],
+          restless: [-2, -1, 0, -1, -1, 0, 1, 2],
+        };
+        var MOOD_EQ_LEGACY = {
+          cruising: [-1, 1, 3, 4, 3, 1, -1, -2],
+          locked:   [-2, 0, 2, 5, 3, 0, -3, -5],
+          drift:    [2, 3, 2, 1, 0, -1, -2, -3],
+          restless: [4, 3, 1, -1, -2, -4, -5, -6],
+        };
+        var isLegacy = new URLSearchParams(window.location.search).get('eq') === 'legacy';
+        var MOOD_EQ = isLegacy ? MOOD_EQ_LEGACY : MOOD_EQ_EVIDENCE;
+
+        var ctx = null, src = null, analyser = null, filters = [], stream = null;
+        var animRef = 0;
+        var currentMood = 'drift';
+
+        var statusEl = document.getElementById('calAudioStatus');
+        var hintEl   = document.getElementById('calAudioHint');
+        var startBtn = document.getElementById('calAudioStart');
+        var stopBtn  = document.getElementById('calAudioStop');
+        var rescanBtn= document.getElementById('calAudioRescan');
+        var pillLabel= document.getElementById('calAudioPillLabel');
+        var dot      = document.getElementById('calAudioDot');
+        var meter    = document.getElementById('calAudioMeter');
+        var modes    = document.querySelectorAll('#calAudioModes button');
+
+        var lastDetected = null;
+
+        async function findVirtual() {
+          var devices = await navigator.mediaDevices.enumerateDevices();
+          var inputs = devices.filter(function (d) { return d.kind === 'audioinput'; });
+          // If no labels, hint user about permission
+          if (inputs.length && !inputs.some(function (d) { return d.label; })) {
+            return { needPermission: true };
+          }
+          var match = inputs.find(function (d) {
+            var lbl = (d.label || '').toLowerCase();
+            return KEYWORDS.some(function (k) { return lbl.includes(k); });
+          });
+          return { device: match || null };
+        }
+
+        async function rescan() {
+          var res = await findVirtual();
+          if (res.needPermission) {
+            statusEl.textContent = 'Mic permission needed to scan devices';
+            hintEl.innerHTML = 'Click <strong>Start capture</strong> below — Chrome will ask once for mic permission, then Calibrate auto-scans for VB-Cable / Voicemeeter on every visit.';
+          } else if (res.device) {
+            lastDetected = res.device;
+            statusEl.textContent = 'Detected: ' + res.device.label;
+            hintEl.innerHTML = 'Ready. Click <strong>Start capture</strong> — system audio routes through Calibrate\'s EQ silently.';
+          } else {
+            lastDetected = null;
+            statusEl.textContent = 'No system-audio device detected';
+            hintEl.innerHTML = 'Try one of these (in order of effort):<br>' +
+              '<span style="display:block;margin-top:6px">1. <strong>Stereo Mix</strong> (no install) — Windows Sound → Recording → right-click → Show Disabled → enable Stereo Mix.</span>' +
+              '<span style="display:block;margin-top:4px">2. <strong>VB-Cable</strong> (driver, runs invisibly) — vb-audio.com/Cable, install + reboot, set CABLE Input as default playback.</span>' +
+              '<span style="display:block;margin-top:4px">3. <strong>NVIDIA Broadcast / OBS Virtual Audio</strong> if already installed.</span>' +
+              '<span style="display:block;margin-top:6px;color:rgba(255,255,255,0.4)">Then click Rescan.</span>';
+          }
+        }
+
+        function setPill(state, label) {
+          dot.className = 'cal-dot' + (state === 'idle' ? ' cal-dot--idle' : state === 'err' ? ' cal-dot--err' : '');
+          pillLabel.textContent = label;
+          meter.style.display = state === 'on' ? 'inline-flex' : 'none';
+        }
+
+        async function startCapture() {
+          try {
+            // First request: this lights up labels in enumerateDevices
+            var probe = await navigator.mediaDevices.getUserMedia({ audio: true });
+            probe.getTracks().forEach(function (t) { t.stop(); });
+
+            var res = await findVirtual();
+            if (!res.device) {
+              statusEl.textContent = 'No virtual audio device found after scan';
+              hintEl.innerHTML = 'After installing VB-Cable / Voicemeeter, set <strong>CABLE Input</strong> as your default playback device in Windows Sound settings. Then click <strong>Rescan</strong>.';
+              setPill('err', 'Audio: no device');
+              return;
+            }
+
+            stream = await navigator.mediaDevices.getUserMedia({
+              audio: {
+                deviceId: { exact: res.device.deviceId },
+                echoCancellation: false,
+                noiseSuppression: false,
+                autoGainControl: false,
+                sampleRate: 48000,
+              },
+            });
+
+            ctx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 48000 });
+            src = ctx.createMediaStreamSource(stream);
+            filters = EQ_FREQUENCIES.map(function (freq, i) {
+              var f = ctx.createBiquadFilter();
+              f.type = 'peaking';
+              f.frequency.value = freq;
+              f.Q.value = Q;
+              f.gain.value = MOOD_EQ[currentMood][i];
+              return f;
+            });
+            analyser = ctx.createAnalyser();
+            analyser.fftSize = 1024;
+            analyser.smoothingTimeConstant = 0.7;
+
+            // Chain: source → filter[0..7] → analyser → destination
+            var node = src;
+            filters.forEach(function (f) { node.connect(f); node = f; });
+            node.connect(analyser);
+            analyser.connect(ctx.destination);
+
+            // ── Route output to a NON-virtual device (avoid feedback loop) ──
+            // If the user has CABLE Input as default playback, we must NOT
+            // play back to it; instead, find a physical speaker output and
+            // route via setSinkId. This requires Chrome 110+.
+            try {
+              var outDevices = (await navigator.mediaDevices.enumerateDevices())
+                .filter(function (d) { return d.kind === 'audiooutput'; });
+              // Reject any output that's a virtual cable (would create loop)
+              var physical = outDevices.find(function (d) {
+                var lbl = (d.label || '').toLowerCase();
+                return !KEYWORDS.some(function (k) { return lbl.includes(k); })
+                  && !lbl.includes('input')         // CABLE Input
+                  && !lbl.includes('voicemeeter');
+              });
+              if (physical && physical.deviceId && typeof ctx.setSinkId === 'function') {
+                await ctx.setSinkId(physical.deviceId);
+                console.log('[Calibrate] output routed to:', physical.label);
+                hintEl.innerHTML = 'Live. EQ: <strong>' + currentMood +
+                  '</strong> preset. Output: ' + (physical.label || 'physical speakers') + '.';
+              } else if (typeof ctx.setSinkId !== 'function') {
+                hintEl.innerHTML = '<strong>Heads-up:</strong> Your browser doesn\'t support output device routing. ' +
+                  'To avoid a feedback loop, manually set Windows default playback BACK to your speakers, ' +
+                  'and instead use per-app routing to send only Spotify/Chrome to CABLE Input.';
+              } else {
+                hintEl.innerHTML = '<strong>Warning:</strong> No physical speaker found among output devices — ' +
+                  'feedback loop possible. Manually set Windows default back to your headphones.';
+              }
+            } catch (sinkErr) {
+              console.warn('[Calibrate] setSinkId failed:', sinkErr);
+            }
+
+            setPill('on', 'Audio: live');
+            statusEl.textContent = 'Capturing: ' + res.device.label;
+            hintEl.innerHTML = 'Live. EQ: <strong>' + currentMood + '</strong> preset. Switch presets below to compare.';
+            startBtn.style.display = 'none';
+            stopBtn.style.display = 'inline-block';
+            startMeter();
+
+            stream.getAudioTracks()[0].addEventListener('ended', stopCapture);
+          } catch (err) {
+            console.error('[Calibrate audio] start failed:', err);
+            statusEl.textContent = 'Error: ' + (err.message || err.name || 'unknown');
+            hintEl.innerHTML = err.name === 'NotAllowedError'
+              ? 'Permission denied. Click the camera icon in Chrome\'s address bar and allow microphone, then try again.'
+              : 'Capture failed. Check that VB-Cable is installed and CABLE Input is your Windows default playback.';
+            setPill('err', 'Audio: error');
+          }
+        }
+
+        function stopCapture() {
+          try {
+            if (stream) stream.getTracks().forEach(function (t) { t.stop(); });
+            if (ctx) ctx.close();
+          } catch (_) {}
+          stream = null; ctx = null; src = null; analyser = null; filters = [];
+          cancelAnimationFrame(animRef);
+          setPill('idle', 'Audio: idle');
+          statusEl.textContent = 'Stopped';
+          startBtn.style.display = 'inline-block';
+          stopBtn.style.display = 'none';
+          var bars = meter.querySelectorAll('span');
+          bars.forEach(function (b) { b.style.height = '10px'; });
+        }
+
+        function startMeter() {
+          var freqBuf = new Float32Array(analyser.frequencyBinCount);
+          var bars = meter.querySelectorAll('span');
+          var SR = ctx.sampleRate;
+          function tick() {
+            if (!analyser) return;
+            analyser.getFloatFrequencyData(freqBuf);
+            EQ_FREQUENCIES.forEach(function (freq, i) {
+              var bin = Math.min(freqBuf.length - 1, Math.round(freq / (SR / 2) * freqBuf.length));
+              var dB = freqBuf[bin]; // -infinity..0
+              var lvl = Math.max(0, Math.min(1, (dB + 90) / 90));
+              var h = 4 + lvl * 14;
+              bars[i].style.height = h + 'px';
+              bars[i].style.background = 'rgba(74,222,128,' + (0.25 + lvl * 0.6) + ')';
+            });
+            animRef = requestAnimationFrame(tick);
+          }
+          tick();
+        }
+
+        function applyMood(mood) {
+          currentMood = mood;
+          modes.forEach(function (b) { b.setAttribute('data-active', b.dataset.mood === mood ? 'true' : 'false'); });
+          if (filters.length && ctx) {
+            var now = ctx.currentTime;
+            MOOD_EQ[mood].forEach(function (gain, i) {
+              if (filters[i]) filters[i].gain.setTargetAtTime(gain, now, 0.05);
+            });
+            hintEl.innerHTML = 'Live. EQ: <strong>' + mood + '</strong> preset. Switch presets below to compare.';
+          }
+        }
+
+        // Wire buttons
+        startBtn.addEventListener('click', startCapture);
+        stopBtn.addEventListener('click', stopCapture);
+        rescanBtn.addEventListener('click', rescan);
+        modes.forEach(function (b) {
+          b.addEventListener('click', function () { applyMood(b.dataset.mood); });
+        });
+
+        // Watch the EQUALIZER panel for preset changes (mirrors React state into our standalone chain)
+        function watchEqualizerPanel() {
+          // Look for "Drifting preset", "Locked in preset", etc. in the React-rendered DOM
+          var labelMap = {
+            'cruising': 'cruising',
+            'locked': 'locked',
+            'drift': 'drift',
+            'drifting': 'drift',
+            'restless': 'restless',
+          };
+          var observer = new MutationObserver(function () {
+            var text = document.body.innerText.toLowerCase();
+            // Search for "<word> preset" pattern
+            var m = text.match(/(cruising|locked|drift|drifting|restless)[ -]?in?[ ]?preset/);
+            if (m && labelMap[m[1]] && labelMap[m[1]] !== currentMood) {
+              applyMood(labelMap[m[1]]);
+            }
+          });
+          observer.observe(document.body, { childList: true, subtree: true, characterData: true });
+        }
+        // Defer until React has had time to mount
+        setTimeout(watchEqualizerPanel, 2000);
+
+        // Initial scan
+        setTimeout(rescan, 500);
+      })();
+    </script>
+  </body>
+</html>

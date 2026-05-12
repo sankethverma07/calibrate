@@ -1,0 +1,12 @@
+# Vercel only deploys what it needs.
+# The Vercel build serves dist/public/ as static + api/* as functions.
+electron/
+client/
+server/
+script/
+node_modules/
+*.log
+.env
+.env.*
+Setup-Git.cmd
+"Launch Calibrate.cmd"

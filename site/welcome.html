@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<!--
+  Calibrate · Marketing landing page
+  © 2026 Sanketh Verma <sankethverma07@gmail.com> · MIT
+-->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Calibrate — Audio that reads how you focus.</title>
+    <meta name="description" content="Closed-loop biofeedback EQ for your computer's audio. Calibrate reads your typing rhythm and mouse precision, infers your focus state, and retunes the system equalizer in response." />
+    <meta name="author" content="Sanketh Verma <sankethverma07@gmail.com>" />
+    <meta property="og:title" content="Calibrate — Audio that reads how you focus." />
+    <meta property="og:description" content="Spotify EQ doesn't know how you feel. Calibrate does." />
+    <meta property="og:type" content="website" />
+    <link href="https://fonts.cdnfonts.com/css/pp-neue-montreal" rel="stylesheet" />
+    <style>
+      :root {
+        --bg:         #06080c;
+        --fg:         rgba(255,255,255,0.95);
+        --fg-dim:     rgba(255,255,255,0.55);
+        --accent:     #2dd4bf;
+        --accent-2:   #93b4f5;
+        --accent-3:   #e09dd8;
+        --rule:       rgba(255,255,255,0.08);
+      }
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      html, body {
+        background: radial-gradient(ellipse at 50% 0%, #0c1018 0%, var(--bg) 60%);
+        color: var(--fg);
+        font-family: 'PP Neue Montreal', 'Neue Montreal', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        font-feature-settings: 'ss01' on, 'ss02' on, 'tnum' on;
+        min-height: 100vh;
+        line-height: 1.55;
+        -webkit-font-smoothing: antialiased;
+      }
+      a { color: inherit; text-decoration: none; }
+      a:hover { text-decoration: underline; }
+
+      .wrap {
+        max-width: 920px;
+        margin: 0 auto;
+        padding: 56px 24px 80px;
+      }
+
+      .nav {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        margin-bottom: 96px;
+      }
+      .brand {
+        font-size: 14px;
+        letter-spacing: 0.32em;
+        text-transform: uppercase;
+      }
+      .nav-links {
+        display: flex;
+        gap: 24px;
+        font-size: 13px;
+        color: var(--fg-dim);
+      }
+
+      .hero h1 {
+        font-size: clamp(48px, 7vw, 88px);
+        font-weight: 450;
+        letter-spacing: -0.025em;
+        line-height: 1;
+        margin-bottom: 28px;
+      }
+      .hero h1 em {
+        font-style: normal;
+        background: linear-gradient(90deg, var(--accent), var(--accent-2), var(--accent-3));
+        background-clip: text; -webkit-background-clip: text;
+        color: transparent;
+      }
+      .hero p.lede {
+        font-size: 20px;
+        font-weight: 300;
+        color: var(--fg-dim);
+        max-width: 620px;
+        margin-bottom: 36px;
+      }
+      .ctas {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        margin-bottom: 16px;
+      }
+      .cta {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 14px 24px;
+        border-radius: 999px;
+        font-size: 14px;
+        letter-spacing: 0.02em;
+        cursor: pointer;
+        border: 1px solid var(--rule);
+        background: rgba(255,255,255,0.04);
+        color: var(--fg);
+        transition: background .2s, border-color .2s, transform .15s;
+      }
+      .cta:hover { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.16); text-decoration: none; }
+      .cta:active { transform: translateY(1px); }
+      .cta-primary {
+        background: linear-gradient(180deg, rgba(45,212,191,0.22), rgba(45,212,191,0.10));
+        border-color: rgba(45,212,191,0.55);
+        color: #d6fff5;
+        font-weight: 450;
+      }
+      .cta-primary:hover { background: linear-gradient(180deg, rgba(45,212,191,0.30), rgba(45,212,191,0.14)); }
+      .cta-note {
+        margin-top: 6px;
+        font-size: 12px;
+        color: var(--fg-dim);
+        margin-bottom: 96px;
+      }
+      .cta-note code {
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 11px;
+        padding: 2px 6px;
+        background: rgba(255,255,255,0.05);
+        border-radius: 4px;
+      }
+
+      h2 {
+        font-size: 28px;
+        font-weight: 350;
+        letter-spacing: -0.015em;
+        margin-bottom: 24px;
+      }
+      .section { margin: 0 0 88px; }
+
+      .compare { display: grid; gap: 16px; }
+      .compare-row {
+        display: grid;
+        grid-template-columns: 220px 1fr;
+        gap: 32px;
+        padding: 20px 0;
+        border-top: 1px solid var(--rule);
+      }
+      .compare-row:last-child { border-bottom: 1px solid var(--rule); }
+      .compare-cat {
+        font-size: 12px;
+        letter-spacing: 0.22em;
+        text-transform: uppercase;
+        color: var(--fg-dim);
+      }
+      .compare-desc { font-size: 15px; line-height: 1.6; }
+      .compare-desc strong { color: var(--accent); font-weight: 450; }
+
+      .features {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+        gap: 18px;
+      }
+      .feat {
+        padding: 22px;
+        border-radius: 16px;
+        border: 1px solid var(--rule);
+        background: rgba(255,255,255,0.03);
+      }
+      .feat-num {
+        font-size: 11px;
+        letter-spacing: 0.22em;
+        text-transform: uppercase;
+        color: var(--accent);
+        margin-bottom: 12px;
+      }
+      .feat-title { font-size: 17px; margin-bottom: 8px; font-weight: 400; }
+      .feat-desc { font-size: 14px; color: var(--fg-dim); line-height: 1.6; }
+
+      .privacy {
+        padding: 24px;
+        border-radius: 18px;
+        background: linear-gradient(180deg, rgba(147,180,245,0.08), rgba(147,180,245,0.02));
+        border: 1px solid rgba(147,180,245,0.20);
+      }
+      .privacy h2 { color: var(--accent-2); margin-bottom: 12px; }
+      .privacy p { font-size: 15px; color: var(--fg-dim); }
+
+      .download-block {
+        margin-top: -32px;
+        padding: 28px;
+        border-radius: 18px;
+        background: linear-gradient(180deg, rgba(45,212,191,0.10), rgba(45,212,191,0.02));
+        border: 1px solid rgba(45,212,191,0.30);
+      }
+      .download-block h2 { color: var(--accent); margin-bottom: 14px; }
+      .download-block p { color: var(--fg-dim); margin-bottom: 14px; font-size: 14px; }
+      .download-block ul { list-style: none; padding: 0; }
+      .download-block li {
+        padding: 6px 0;
+        font-size: 13px;
+        color: var(--fg-dim);
+      }
+      .download-block li::before {
+        content: '· ';
+        color: var(--accent);
+        margin-right: 4px;
+      }
+
+      footer {
+        margin-top: 64px;
+        padding-top: 24px;
+        border-top: 1px solid var(--rule);
+        display: flex;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 12px;
+        font-size: 12px;
+        color: var(--fg-dim);
+      }
+      footer .sig em { color: var(--fg); font-style: normal; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+
+      <header class="nav">
+        <div class="brand">Calibrate</div>
+        <nav class="nav-links">
+          <a href="#how">How it works</a>
+          <a href="#why">Why it's different</a>
+          <a href="#download">Download</a>
+          <a href="https://github.com/sankethverma07/calibrate" target="_blank" rel="noopener">GitHub</a>
+        </nav>
+      </header>
+
+      <section class="hero">
+        <h1>Audio that reads how <em>you</em> focus.</h1>
+        <p class="lede">
+          Calibrate watches your typing rhythm and mouse precision, infers your cognitive state in real time, and retunes the system equalizer to match — automatically, locally, no wearables.
+        </p>
+        <div class="ctas">
+          <a class="cta cta-primary" href="#download">Download for Windows ↓</a>
+          <a class="cta" href="https://github.com/sankethverma07/calibrate" target="_blank" rel="noopener">Source on GitHub</a>
+        </div>
+        <p class="cta-note">
+          Currently Windows-only. macOS &amp; Linux on the roadmap. Requires <code>Equalizer APO</code> for system-wide EQ.
+        </p>
+      </section>
+
+      <section class="section" id="why">
+        <h2>Why it's different</h2>
+        <div class="compare">
+          <div class="compare-row">
+            <div class="compare-cat">Static EQ presets</div>
+            <div class="compare-desc">Spotify, Boom 3D — pick a curve and it never changes. <strong>Calibrate is closed-loop.</strong></div>
+          </div>
+          <div class="compare-row">
+            <div class="compare-cat">Pre-tuned focus audio</div>
+            <div class="compare-desc">Brain.fm, Focus@Will — plays science at you, can't read from you. <strong>Calibrate reads your state.</strong></div>
+          </div>
+          <div class="compare-row">
+            <div class="compare-cat">Sensor-driven audio</div>
+            <div class="compare-desc">Endel adapts to heart rate — needs a wearable. <strong>Calibrate uses keystrokes you'd already be typing.</strong></div>
+          </div>
+          <div class="compare-row">
+            <div class="compare-cat">Per-app EQ</div>
+            <div class="compare-desc">Most "smart audio" only affects one player. <strong>Calibrate retunes the entire OS audio output via Equalizer APO.</strong></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="how">
+        <h2>How it works</h2>
+        <div class="features">
+          <div class="feat">
+            <div class="feat-num">01</div>
+            <div class="feat-title">Calibrate to you</div>
+            <div class="feat-desc">~90 s of normal typing learns <em>your</em> baseline: inter-keystroke timing, error rate, mouse jitter, sharp turns.</div>
+          </div>
+          <div class="feat">
+            <div class="feat-num">02</div>
+            <div class="feat-title">Classify state</div>
+            <div class="feat-desc">A validated detector reads deviation into four states — Cruising, Locked In, Drifting, Restless — with sub-level intensity.</div>
+          </div>
+          <div class="feat">
+            <div class="feat-num">03</div>
+            <div class="feat-title">Retune in real time</div>
+            <div class="feat-desc">Each mood maps to an 8-band EQ. Applied system-wide via Equalizer APO — YouTube, Spotify, Discord, Zoom all in sync.</div>
+          </div>
+          <div class="feat">
+            <div class="feat-num">04</div>
+            <div class="feat-title">Per-song memory</div>
+            <div class="feat-desc">Learns which curve correlates with your best focus for each track. Optimize button applies it.</div>
+          </div>
+          <div class="feat">
+            <div class="feat-num">05</div>
+            <div class="feat-title">Breathing pulse</div>
+            <div class="feat-desc">When restless mood sustains, soft edge glows breathe 4 s in / 4 s out — paced to the slow-breathing window shown to maximize HRV.</div>
+          </div>
+          <div class="feat">
+            <div class="feat-num">06</div>
+            <div class="feat-title">Custom EQ + presets</div>
+            <div class="feat-desc">Override the evidence-based defaults. 8 bands, ±12 dB. Save named presets that ride alongside the built-in moods.</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section privacy">
+        <h2>Privacy-local by default</h2>
+        <p>
+          All signal processing runs on your machine. Keystrokes live in a per-word buffer that's discarded the moment the word resolves — only aggregate metrics persist. No raw text, audio, or screen content leaves your computer. Cross-device sync is opt-in via the Account panel inside Profile.
+        </p>
+      </section>
+
+      <section class="section download-block" id="download">
+        <h2>Get Calibrate</h2>
+        <p>The desktop app is the real product — it's where system-wide EQ, global keystroke capture, and Now Playing detection live. Download the latest build from GitHub Releases:</p>
+        <div class="ctas" style="margin-bottom: 14px">
+          <a class="cta cta-primary" href="https://github.com/sankethverma07/calibrate/releases/latest" target="_blank" rel="noopener">Latest release on GitHub ↗</a>
+          <a class="cta" href="https://github.com/sankethverma07/calibrate#install" target="_blank" rel="noopener">Build from source</a>
+        </div>
+        <ul>
+          <li>Windows 10 / 11 (x64)</li>
+          <li>Requires <a href="https://sourceforge.net/projects/equalizerapo/" target="_blank" rel="noopener">Equalizer APO</a> installed and routed through your output device</li>
+          <li>~120 MB install · Electron-based · single-window</li>
+        </ul>
+      </section>
+
+      <footer>
+        <div class="sig">© 2026 <em>Sanketh Verma</em> · <a href="mailto:sankethverma07@gmail.com">sankethverma07@gmail.com</a></div>
+        <div>MIT licensed · <a href="https://github.com/sankethverma07/calibrate" target="_blank" rel="noopener">github.com/sankethverma07/calibrate</a></div>
+      </footer>
+
+    </div>
+  </body>
+</html>

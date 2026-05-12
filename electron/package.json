@@ -1,0 +1,53 @@
+{
+  "name": "calibrate-desktop",
+  "version": "1.0.0",
+  "description": "Calibrate — Closed-loop biofeedback EQ that reads your typing rhythm + mouse precision to retune system audio in real time.",
+  "author": {
+    "name":  "Sanketh Verma",
+    "email": "sankethverma07@gmail.com"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/sankethverma07/calibrate",
+  "repository": {
+    "type": "git",
+    "url":  "https://github.com/sankethverma07/calibrate.git"
+  },
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "build:web": "cd .. && npm run build:client",
+    "package:win": "electron-builder --win",
+    "package:mac": "electron-builder --mac",
+    "package:linux": "electron-builder --linux"
+  },
+  "build": {
+    "appId": "com.calibrate.app",
+    "productName": "Calibrate",
+    "files": [
+      "src/**/*",
+      "node_modules/**/*"
+    ],
+    "extraResources": [
+      "../dist/public/**/*"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "assets/icon.ico"
+    },
+    "mac": {
+      "target": "dmg",
+      "icon": "assets/icon.icns"
+    },
+    "linux": {
+      "target": "AppImage"
+    }
+  },
+  "dependencies": {
+    "electron-store": "^8.1.0",
+    "uiohook-napi": "^1.5.5"
+  },
+  "devDependencies": {
+    "electron": "^28.0.0",
+    "electron-builder": "^24.9.0"
+  }
+}
