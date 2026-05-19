@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Calibrate · Hero Cinematic</title>
+  <!--
+    Calibrate · P1 Hero Cinematic Loop
+    ────────────────────────────────────────────────────────────
+    A self-contained, code-directed 10-second movie shot. No screen
+    recording — every pixel is animated logically. Open in Chrome,
+    press F11 for fullscreen, record with OBS at whatever resolution
+    your portfolio needs (1920×1080 is the default canvas).
+
+    © 2026 Sanketh Verma <sankethverma07@gmail.com> · MIT
+  -->
+  <link href="https://fonts.cdnfonts.com/css/pp-neue-montreal" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #06080c;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      background: var(--bg);
+      color: #fff;
+      font-family: 'PP Neue Montreal', 'Neue Montreal', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-feature-settings: 'ss01' on, 'ss02' on, 'tnum' on;
+      overflow: hidden;
+      width: 100%; height: 100%;
+      -webkit-font-smoothing: antialiased;
+    }
+    .stage {
+      position: fixed; inset: 0;
+      background: var(--bg);
+      overflow: hidden;
+      isolation: isolate;
+    }
+    #heroCanvas {
+      position: absolute; inset: 0;
+      width: 100%; height: 100%;
+      display: block;
+    }
+    .vignette {
+      position: absolute; inset: 0; pointer-events: none; z-index: 2;
+      background: radial-gradient(ellipse at center, transparent 30%, rgba(0,0,0,0.65) 100%);
+    }
+    .grain {
+      position: absolute; inset: 0; pointer-events: none; z-index: 3;
+      opacity: 0.05; mix-blend-mode: overlay;
+      background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9'/></filter><rect width='160' height='160' filter='url(%23n)'/></svg>");
+    }
+    #blackVeil {
+      position: absolute; inset: 0; z-index: 4; pointer-events: none;
+      background: #000; opacity: 1;
+      transition: opacity 2s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    #wordmark {
+      position: absolute; left: 50%; top: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 5; pointer-events: none;
+      font-weight: 300;
+      font-size: clamp(46px, 5.5vw, 88px);
+      letter-spacing: 0.55em;
+      color: rgba(255, 255, 255, 0.96);
+      opacity: 0;
+      padding-left: 0.55em;
+      text-shadow:
+        0 0 40px rgba(255, 255, 255, 0.22),
+        0 0 120px rgba(125, 180, 255, 0.18);
+      transition:
+        opacity 1.2s cubic-bezier(0.22, 1, 0.36, 1),
+        letter-spacing 1.8s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    #tagline {
+      position: absolute; left: 50%; bottom: 11%;
+      transform: translateX(-50%);
+      z-index: 5; pointer-events: none;
+      font-weight: 300;
+      font-size: clamp(11px, 1.1vw, 15px);
+      letter-spacing: 0.42em;
+      color: rgba(255, 255, 255, 0.55);
+      text-transform: uppercase;
+      opacity: 0;
+      transition: opacity 1.5s cubic-bezier(0.22, 1, 0.36, 1) 0.4s;
+    }
+    #replay {
+      position: absolute; right: 24px; bottom: 24px; z-index: 7;
+      appearance: none;
+      background: rgba(255, 255, 255, 0.05);
+      color: rgba(255, 255, 255, 0.85);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 999px;
+      padding: 9px 18px;
+      font-family: inherit;
+      font-size: 11px;
+      letter-spacing: 0.18em;
+      cursor: pointer;
+      text-transform: uppercase;
+      opacity: 0;
+      transition: opacity 0.7s ease, background 0.2s ease;
+    }
+    #replay:hover { background: rgba(255, 255, 255, 0.10); }
+  </style>
+</head>
+<body>
+  <div class="stage">
+    <canvas id="heroCanvas"></canvas>
+    <div class="vignette"></div>
+    <div class="grain"></div>
+    <div id="blackVeil"></div>
+    <div id="wordmark">CALIBRATE</div>
+    <div id="tagline">audio · that reads · how you focus</div>
+    <button id="replay" type="button">Replay</button>
+  </div>
+  <script>
+    (function () {
+      const canvas   = document.getElementById('heroCanvas');
+      const ctx      = canvas.getContext('2d');
+      const veil     = document.getElementById('blackVeil');
+      const word     = document.getElementById('wordmark');
+      const tagline  = document.getElementById('tagline');
+      const replay   = document.getElementById('replay');
+
+      const MOODS = {
+        cruising: { h: 170, s: 0.78, amp: 0.42, dens: 1.00, spd: 0.20 },
+        locked:   { h: 218, s: 0.72, amp: 0.62, dens: 1.05, spd: 0.32 },
+        drift:    { h: 305, s: 0.66, amp: 0.85, dens: 1.10, spd: 0.46 },
+        restless: { h: 28,  s: 0.92, amp: 1.20, dens: 1.15, spd: 0.65 },
+      };
+
+      const state = {
+        W: 0, H: 0,
+        t0: 0,
+        target: { ...MOODS.cruising },
+        current: { ...MOODS.cruising },
+        pCount: 0,
+        cameraTilt: 0.18,
+      };
+
+      function resize() {
+        const r = canvas.getBoundingClientRect();
+        const dpr = Math.min(window.devicePixelRatio || 1, 2);
+        canvas.width  = Math.floor(r.width  * dpr);
+        canvas.height = Math.floor(r.height * dpr);
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        state.W = r.width; state.H = r.height;
+      }
+
+      const N = 1100;
+      const particles = new Array(N).fill(0).map(function () {
+        return {
+          x: Math.random() * 1.6 - 0.8,
+          z: Math.random() * 1.4 + 0.05,
+          phase: Math.random() * Math.PI * 2,
+          pSpeed: 0.85 + Math.random() * 0.4,
+          brightness: 0.4 + Math.random() * 0.6,
+          outlier: Math.random() < 0.13,
+          yOffset: (Math.random() - 0.5) * 0.18,
+          radius: 0.6 + Math.random() * 1.2,
+        };
+      });
+
+      function lerp(a, b, k) { return a + (b - a) * k; }
+      function lerpHue(a, b, k) {
+        let d = ((b - a + 540) % 360) - 180;
+        return (a + d * k + 360) % 360;
+      }
+      function lerpState(dt) {
+        const tau = 0.55;
+        const k = 1 - Math.exp(-dt / tau);
+        state.current.h    = lerpHue(state.current.h, state.target.h, k);
+        state.current.s    = lerp(state.current.s,    state.target.s,    k);
+        state.current.amp  = lerp(state.current.amp,  state.target.amp,  k);
+        state.current.dens = lerp(state.current.dens, state.target.dens, k);
+        state.current.spd  = lerp(state.current.spd,  state.target.spd,  k);
+      }
+      function hsla(h, s, l, a) {
+        return 'hsla(' + h.toFixed(1) + ',' + (s*100).toFixed(1) + '%,' + (l*100).toFixed(1) + '%,' + a.toFixed(3) + ')';
+      }
+
+      let lastFrame = 0;
+      function frame(now) {
+        if (!state.t0) state.t0 = now;
+        const t = (now - state.t0) / 1000;
+        const dt = Math.min(0.05, (now - lastFrame) / 1000 || 0.016);
+        lastFrame = now;
+        lerpState(dt);
+
+        ctx.fillStyle = '#06080c';
+        ctx.fillRect(0, 0, state.W, state.H);
+
+        const horizon = state.H * 0.58;
+        const focal   = state.W * 0.95;
+        const tiltEase = Math.min(1, t / 4);
+        const tilt = state.cameraTilt * tiltEase;
+
+        const reveal = Math.max(0, Math.min(1, (t - 1.5) / 2.5));
+        const ease = reveal * reveal * (3 - 2 * reveal);
+        state.pCount = Math.floor(N * ease);
+
+        ctx.globalCompositeOperation = 'lighter';
+        const drawCount = state.pCount;
+        for (let i = 0; i < drawCount; i++) {
+          const p = particles[i];
+          const waveY = Math.sin(p.x * 6.5 + t * state.current.spd * 3.5 + p.phase) * 0.10 * state.current.amp;
+          const tiltY = p.x * tilt;
+          const y3d = waveY + tiltY + p.yOffset;
+          const persp = focal / (focal + p.z * 800);
+          const x = state.W * 0.5 + p.x * state.W * 0.55 * persp;
+          const y = horizon + y3d * state.H * 0.45 * persp - p.z * 30;
+          const bandDist = Math.abs(p.outlier ? 0 : waveY * 4);
+          const bandFalloff = Math.max(0.2, 1 - bandDist);
+          const h = state.current.h + Math.sin(p.x * 3 + t) * 6;
+          const s = state.current.s;
+          const l = 0.55 + Math.sin(t * 1.2 + p.phase) * 0.05;
+          const a = p.brightness * bandFalloff * persp * 0.85;
+          const r = p.radius * persp * 1.4;
+          ctx.fillStyle = hsla(h, s, l, a);
+          ctx.beginPath();
+          ctx.arc(x, y, r, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.globalCompositeOperation = 'source-over';
+        requestAnimationFrame(frame);
+      }
+
+      function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+      async function runShot() {
+        veil.style.transition = 'none';
+        veil.style.opacity = '1';
+        word.style.transition = 'none';
+        word.style.opacity = '0';
+        word.style.letterSpacing = '0.55em';
+        tagline.style.opacity = '0';
+        replay.style.opacity = '0';
+        state.t0 = 0;
+        state.current = { ...MOODS.cruising };
+        state.target  = { ...MOODS.cruising };
+        state.pCount  = 0;
+        void veil.offsetWidth;
+        veil.style.transition = 'opacity 2s cubic-bezier(0.22, 1, 0.36, 1)';
+        word.style.transition = 'opacity 1.2s cubic-bezier(0.22, 1, 0.36, 1), letter-spacing 1.8s cubic-bezier(0.22, 1, 0.36, 1)';
+
+        await sleep(800);
+        veil.style.opacity = '0';
+        await sleep(1700);
+        await sleep(2200);
+        state.target = { ...MOODS.locked };
+        await sleep(2000);
+        state.target = { ...MOODS.drift };
+        await sleep(1300);
+        word.style.opacity = '1';
+        word.style.letterSpacing = '0.38em';
+        await sleep(700);
+        tagline.style.opacity = '1';
+        await sleep(1200);
+        replay.style.opacity = '1';
+      }
+
+      resize();
+      window.addEventListener('resize', resize);
+      requestAnimationFrame(frame);
+      runShot();
+      replay.addEventListener('click', runShot);
+
+      // Press R to replay, F for fullscreen, S to take a still
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'r' || e.key === 'R') runShot();
+        if (e.key === 'f' || e.key === 'F') {
+          if (!document.fullscreenElement) document.documentElement.requestFullscreen();
+          else document.exitFullscreen();
+        }
+      });
+    })();
+  </script>
+</body>
+</html>

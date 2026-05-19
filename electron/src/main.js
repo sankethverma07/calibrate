@@ -21,16 +21,24 @@ const path = require('path');
 const fs = require('fs');
 const { exec } = require('child_process');
 
+// Structured logger + crash capture. Initializing as early as possible
+// so even ESM-loader / GPU-init failures land in the rolling log file
+// instead of disappearing into stderr.
+const logger = require('./logger');
+logger.init();
+const log = logger.scope('main');
+
 // Optional native dependency for global input capture (typing/mouse outside
 // the Calibrate window). Loaded with try/catch so the app degrades gracefully
 // if uiohook-napi isn't installed yet.
 let uIOhook = null;
 try {
   uIOhook = require('uiohook-napi').uIOhook;
-  console.log('[Calibrate] uiohook-napi loaded — global input capture available');
+  log.info('uiohook-napi loaded — global input capture available');
 } catch (e) {
-  console.log('[Calibrate] uiohook-napi not installed — running with in-window input only.');
-  console.log('[Calibrate] To enable global capture: cd electron && npm install uiohook-napi');
+  log.warn('uiohook-napi not installed — running with in-window input only', {
+    hint: 'cd electron && npm install uiohook-napi',
+  });
 }
 
 let mainWindow = null;

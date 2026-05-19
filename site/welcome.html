@@ -312,15 +312,117 @@
         <h2>Get Calibrate</h2>
         <p>The desktop app is the real product — it's where system-wide EQ, global keystroke capture, and Now Playing detection live. Download the latest build from GitHub Releases:</p>
         <div class="ctas" style="margin-bottom: 14px">
-          <a class="cta cta-primary" href="https://github.com/sankethverma07/calibrate/releases/latest" target="_blank" rel="noopener">Latest release on GitHub ↗</a>
+          <!-- These hrefs are the *fallback* — they always resolve to the
+               GitHub "latest release" redirector even if the API call below
+               fails. On a successful API fetch they're rewritten in-place
+               to point straight at the matched asset (.exe for Windows,
+               .dmg for macOS, .AppImage for Linux), so the user clicks one
+               link and the right file starts downloading. -->
+          <a class="cta cta-primary"
+             id="dl-primary"
+             data-platform="auto"
+             href="https://github.com/sankethverma07/calibrate/releases/latest"
+             target="_blank" rel="noopener">Download Calibrate ↓</a>
+          <a class="cta"
+             id="dl-all"
+             href="https://github.com/sankethverma07/calibrate/releases/latest"
+             target="_blank" rel="noopener">All platforms / older versions</a>
           <a class="cta" href="https://github.com/sankethverma07/calibrate#install" target="_blank" rel="noopener">Build from source</a>
         </div>
-        <ul>
-          <li>Windows 10 / 11 (x64)</li>
-          <li>Requires <a href="https://sourceforge.net/projects/equalizerapo/" target="_blank" rel="noopener">Equalizer APO</a> installed and routed through your output device</li>
+        <ul id="dl-meta">
+          <li id="dl-version">Resolving latest release…</li>
+          <li>Windows 10 / 11 (x64) · macOS 12+ · Linux x64 (AppImage)</li>
+          <li>Requires <a href="https://sourceforge.net/projects/equalizerapo/" target="_blank" rel="noopener">Equalizer APO</a> on Windows for system-wide EQ routing</li>
           <li>~120 MB install · Electron-based · single-window</li>
         </ul>
       </section>
+
+      <script>
+        // ───────────────────────────────────────────────────────────────
+        // Dynamic download link — pulls the latest release from the
+        // GitHub Releases API at page load and rewrites the primary
+        // download CTA to the matching asset for the visitor's OS.
+        //
+        // Why client-side (not build-time)?
+        //  · The marketing site is a flat Vercel deployment with no
+        //    build step beyond `cp -r site dist`. A build-time approach
+        //    would require Vercel cron + a re-deploy on every release,
+        //    which defeats the point.
+        //  · The GH API is CORS-friendly and rate-limits per IP (60/hr),
+        //    which is well within marketing-page traffic patterns. The
+        //    response is also cacheable so refreshes stay snappy.
+        //  · If the fetch fails (offline, rate-limited, repo private),
+        //    the link falls back to /releases/latest on GitHub which
+        //    works as a redirector — no broken state.
+        // ───────────────────────────────────────────────────────────────
+        (function wireLatestRelease() {
+          var REPO = 'sankethverma07/calibrate';
+          var btn  = document.getElementById('dl-primary');
+          var ver  = document.getElementById('dl-version');
+          if (!btn || !ver) return;
+
+          // Detect OS so we can pick the right asset.
+          var ua = navigator.userAgent || '';
+          var platform = /windows/i.test(ua) ? 'win'
+                       : /mac/i.test(ua)     ? 'mac'
+                       : /linux/i.test(ua)   ? 'linux'
+                       : 'win'; // Default to Windows — primary target.
+
+          // Asset matchers per platform. electron-builder NSIS / DMG /
+          // AppImage names typically include the platform string or
+          // file extension, so we match on extension first (most reliable)
+          // and fall back to name substring.
+          var matchers = {
+            win:   function (n) { return /\.exe$/i.test(n); },
+            mac:   function (n) { return /\.dmg$/i.test(n); },
+            linux: function (n) { return /\.AppImage$/i.test(n); },
+          };
+          var labels = { win: 'Windows', mac: 'macOS', linux: 'Linux' };
+
+          fetch('https://api.github.com/repos/' + REPO + '/releases/latest', {
+            headers: { 'Accept': 'application/vnd.github+json' },
+          })
+            .then(function (r) {
+              if (!r.ok) throw new Error('GitHub API responded ' + r.status);
+              return r.json();
+            })
+            .then(function (release) {
+              var tag    = release.tag_name || 'latest';
+              var date   = release.published_at
+                ? new Date(release.published_at).toLocaleDateString(undefined, {
+                    year: 'numeric', month: 'short', day: 'numeric'
+                  })
+                : null;
+
+              // Find the matching asset for this OS.
+              var assets = Array.isArray(release.assets) ? release.assets : [];
+              var pick   = assets.find(function (a) {
+                return a && a.name && matchers[platform] && matchers[platform](a.name);
+              });
+
+              if (pick && pick.browser_download_url) {
+                btn.href = pick.browser_download_url;
+                btn.textContent = 'Download for ' + labels[platform] + ' · ' + tag + ' ↓';
+              } else {
+                // No matching asset — keep fallback href, just update label
+                // so users know which version they'll get from the redirector.
+                btn.textContent = 'Download Calibrate · ' + tag + ' ↓';
+              }
+
+              ver.textContent = 'Latest release: ' + tag + (date ? ' · ' + date : '');
+            })
+            .catch(function (err) {
+              // API failed — leave the fallback link in place. Log to console
+              // so a maintainer noticing a stuck label can debug it; users
+              // see the original "Resolving…" line replaced with a graceful
+              // pointer back to the releases page.
+              if (window && window.console) {
+                console.warn('[dl] could not resolve latest release:', err);
+              }
+              ver.innerHTML = 'Latest releases on <a href="https://github.com/' + REPO + '/releases" target="_blank" rel="noopener">GitHub</a>';
+            });
+        })();
+      </script>
 
       <footer>
         <div class="sig">© 2026 <em>Sanketh Verma</em> · <a href="mailto:sankethverma07@gmail.com">sankethverma07@gmail.com</a></div>

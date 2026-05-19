@@ -19,7 +19,20 @@ release/
 *.rpm
 
 # ─── Vite / web build ─────────────────────────────────────────
+# `dist/` is ignored by default to keep server bundle (dist/index.cjs)
+# and Vite-hashed assets (dist/public/assets/) out of the repo.
+#
+# BUT the renderer's hand-maintained source files actually live under
+# dist/public/ (this is where Electron loads from via file://). They're
+# treated as source, not output — so they need to be tracked explicitly.
 dist/
+!dist/public/
+dist/public/*
+!dist/public/index.html
+!dist/public/welcome.html
+!dist/public/runtime-env.js
+!dist/public/supabase/
+!dist/public/supabase/**
 build/
 .vite/
 server/public/

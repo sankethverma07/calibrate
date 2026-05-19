@@ -1,0 +1,126 @@
+name: CI
+
+# Lightweight production-stack hygiene.
+# Two flows live in here:
+#   • build  — runs on every push/PR to main. Typecheck + build, upload dist/
+#              as a 7-day artifact. Acts as the "is this PR shippable" gate.
+#   • release — runs ONLY on tag pushes that look like v1.2.3. Builds the
+#              Electron installer on each OS that has a packaging target
+#              (Windows/macOS/Linux) and uploads every artifact to a fresh
+#              GitHub Release for that tag. A single `git push origin v1.0.1`
+#              becomes a published release with downloadable installers.
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*.*.*']
+  pull_request:
+    branches: [main]
+
+# Cancel any in-flight run for the same branch/tag when a newer commit arrives.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ─── Always run: typecheck + build the renderer bundle ──────────────
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      # `tsc` only — fast, catches type regressions before merge.
+      - name: Typecheck
+        run: npm run check
+
+      - name: Build (server + client bundles)
+        run: npm run build
+
+      - name: Upload build artifact (dist/)
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: calibrate-dist-${{ github.sha }}
+          path: dist
+          retention-days: 7
+          if-no-files-found: warn
+
+  # ─── Tag-triggered: build the Electron installer per platform and ───
+  #     publish them all to a single GitHub Release for the tag.
+  release:
+    # Only when the pushed ref is a vX.Y.Z tag.
+    if: startsWith(github.ref, 'refs/tags/v')
+    # Each OS builds its own installer; matrix.continue-on-error is off so
+    # a broken Windows build won't silently ship just the macOS one.
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            script: package:win
+            artifact_glob: 'electron/dist/*.exe'
+          - os: macos-latest
+            script: package:mac
+            artifact_glob: 'electron/dist/*.dmg'
+          - os: ubuntu-latest
+            script: package:linux
+            artifact_glob: 'electron/dist/*.AppImage'
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    permissions:
+      # Required so softprops/action-gh-release can create the release.
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install root deps
+        run: npm ci
+
+      - name: Build web bundle (dist/public/)
+        # electron-builder packages dist/public/ via extraResources, so the
+        # web build has to happen before electron-builder runs.
+        run: npm run build:client
+
+      - name: Install electron deps
+        working-directory: electron
+        run: npm install
+
+      - name: Build installer
+        working-directory: electron
+        # GH_TOKEN is needed by electron-builder ONLY if you ask it to publish
+        # itself. We let action-gh-release do that, so we just build locally.
+        run: npm run ${{ matrix.script }}
+        env:
+          # Skip electron-builder's own auto-publish; we upload via the action.
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload installer to the Release
+        uses: softprops/action-gh-release@v2
+        with:
+          # The tag that triggered the workflow is reused as the release tag.
+          # The release is created on first upload, then each subsequent
+          # matrix entry attaches its installer to the same release.
+          files: ${{ matrix.artifact_glob }}
+          fail_on_unmatched_files: true
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

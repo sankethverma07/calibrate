@@ -1,0 +1,701 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Calibrate · Hero Cinematic v2</title>
+  <!--
+    Calibrate · Hero Cinematic v2
+    ──────────────────────────────────────────────────────────────────
+    A 15-second, 5-shot directed sequence in real 3D.
+      Shot 1 (0–3 s)   God's-eye descend
+      Shot 2 (3–6 s)   Horizon dolly · color shift cruising → locked
+      Shot 3 (6–9 s)   Bars materialize floating · drift magenta
+      Shot 4 (9–12 s)  Bars fixate to glass card · wave responds
+      Shot 5 (12–15 s) Pull back · CALIBRATE wordmark fades in
+
+    Open in Chrome, F11 for fullscreen, R to replay, S to step the clock.
+    Record with OBS at 1920×1080@60fps.
+
+    © 2026 Sanketh Verma <sankethverma07@gmail.com> · MIT
+  -->
+  <link href="https://fonts.cdnfonts.com/css/pp-neue-montreal" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      background: #04060a;
+      color: #fff;
+      font-family: 'PP Neue Montreal', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      overflow: hidden;
+      width: 100vw; height: 100vh;
+      -webkit-font-smoothing: antialiased;
+    }
+    .stage { position: fixed; inset: 0; }
+    canvas#scene { display: block; width: 100% !important; height: 100% !important; }
+
+    /* Cinematic black bars (subtle, just a 5% letterboxing for "this is a film" feel) */
+    .bar-top, .bar-bot {
+      position: absolute; left: 0; right: 0; z-index: 5;
+      background: #000; pointer-events: none;
+    }
+    .bar-top { top: 0; height: 0; transition: height 0.6s cubic-bezier(0.22,1,0.36,1); }
+    .bar-bot { bottom: 0; height: 0; transition: height 0.6s cubic-bezier(0.22,1,0.36,1); }
+    .stage[data-letterbox="true"] .bar-top,
+    .stage[data-letterbox="true"] .bar-bot { height: 4vh; }
+
+    /* Vignette */
+    .vignette {
+      position: absolute; inset: 0; z-index: 4; pointer-events: none;
+      background: radial-gradient(ellipse at center, transparent 40%, rgba(0,0,0,0.55) 100%);
+    }
+
+    /* Fade veil (used for cuts) */
+    .veil {
+      position: absolute; inset: 0; z-index: 6; pointer-events: none;
+      background: #000; opacity: 1;
+      transition: opacity 1.2s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    /* Wordmark (revealed in Shot 5) */
+    .wordmark {
+      position: absolute; left: 8%; top: 16%;
+      z-index: 7; pointer-events: none;
+      font-weight: 300;
+      font-size: clamp(40px, 5vw, 78px);
+      letter-spacing: 0.5em;
+      color: rgba(255, 255, 255, 0.96);
+      opacity: 0;
+      padding-left: 0.5em;
+      text-shadow: 0 0 60px rgba(255,255,255,0.18), 0 0 160px rgba(125,180,255,0.12);
+      transition:
+        opacity 1.2s cubic-bezier(0.22, 1, 0.36, 1),
+        letter-spacing 1.6s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    .tagline {
+      position: absolute; left: 8%; top: calc(16% + 6vw + 14px);
+      z-index: 7; pointer-events: none;
+      font-weight: 300;
+      font-size: clamp(11px, 1vw, 14px);
+      letter-spacing: 0.34em;
+      color: rgba(255,255,255,0.55);
+      text-transform: uppercase;
+      opacity: 0;
+      transition: opacity 1.4s cubic-bezier(0.22, 1, 0.36, 1) 0.5s;
+    }
+
+    /* HUD (timing readout, dev only) */
+    .hud {
+      position: absolute; left: 16px; bottom: 16px; z-index: 8;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 11px; letter-spacing: 0.04em;
+      color: rgba(255,255,255,0.35);
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    }
+    .hud[data-show="true"] { opacity: 1; }
+
+    .controls {
+      position: absolute; right: 16px; bottom: 16px; z-index: 8;
+      display: flex; gap: 8px;
+    }
+    .controls button {
+      appearance: none;
+      background: rgba(255,255,255,0.05);
+      color: rgba(255,255,255,0.85);
+      border: 1px solid rgba(255,255,255,0.14);
+      border-radius: 999px;
+      padding: 7px 14px;
+      font-family: inherit;
+      font-size: 11px;
+      letter-spacing: 0.16em;
+      cursor: pointer;
+      text-transform: uppercase;
+      opacity: 0; transition: opacity 0.6s ease, background 0.2s ease;
+    }
+    .controls button:hover { background: rgba(255,255,255,0.10); }
+    .controls[data-show="true"] button { opacity: 1; }
+  </style>
+</head>
+<body>
+  <div class="stage" id="stage" data-letterbox="false">
+    <canvas id="scene"></canvas>
+    <div class="vignette"></div>
+    <div class="bar-top"></div>
+    <div class="bar-bot"></div>
+    <div class="veil" id="veil"></div>
+    <div class="wordmark" id="wordmark">CALIBRATE</div>
+    <div class="tagline" id="tagline">audio · that reads · how you focus</div>
+    <div class="hud" id="hud" data-show="false">SHOT 1 · 0.0s</div>
+    <div class="controls" id="controls">
+      <button id="replay">Replay</button>
+      <button id="hudToggle">HUD</button>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.min.js"></script>
+  <script>
+  (function () {
+    const canvas   = document.getElementById('scene');
+    const stage    = document.getElementById('stage');
+    const veil     = document.getElementById('veil');
+    const word     = document.getElementById('wordmark');
+    const tagline  = document.getElementById('tagline');
+    const hudEl    = document.getElementById('hud');
+    const replayBt = document.getElementById('replay');
+    const hudBt    = document.getElementById('hudToggle');
+    const controls = document.getElementById('controls');
+
+    // ─── Three.js scaffolding ────────────────────────────────────
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x04060a);
+
+    const renderer = new THREE.WebGLRenderer({
+      canvas, antialias: true, alpha: false, powerPreference: 'high-performance'
+    });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+
+    const camera = new THREE.PerspectiveCamera(38, 16/9, 0.1, 200);
+    camera.position.set(0, 12, 0.1);
+    camera.lookAt(0, 0, 0);
+
+    function resize() {
+      const w = window.innerWidth, h = window.innerHeight;
+      renderer.setSize(w, h, false);
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+    }
+    resize();
+    window.addEventListener('resize', resize);
+
+    // ─── Mood palette ────────────────────────────────────────────
+    // Hue (0-1), saturation (0-1), amplitude scale, travel speed.
+    const MOODS = {
+      cruising: { h: 170/360, s: 0.78, amp: 0.42, spd: 0.20 },
+      locked:   { h: 218/360, s: 0.72, amp: 0.62, spd: 0.32 },
+      drift:    { h: 305/360, s: 0.66, amp: 0.85, spd: 0.46 },
+      restless: { h: 28/360,  s: 0.92, amp: 1.20, spd: 0.65 },
+    };
+
+    const moodState = {
+      target:  { ...MOODS.cruising },
+      current: { ...MOODS.cruising },
+    };
+    function lerp(a, b, k) { return a + (b - a) * k; }
+    function lerpHue(a, b, k) {
+      let d = ((b - a + 1.5) % 1) - 0.5;
+      return (a + d * k + 1) % 1;
+    }
+    function lerpMood(dt) {
+      const tau = 0.55;
+      const k = 1 - Math.exp(-dt / tau);
+      moodState.current.h   = lerpHue(moodState.current.h, moodState.target.h, k);
+      moodState.current.s   = lerp(moodState.current.s,   moodState.target.s,   k);
+      moodState.current.amp = lerp(moodState.current.amp, moodState.target.amp, k);
+      moodState.current.spd = lerp(moodState.current.spd, moodState.target.spd, k);
+    }
+
+    // ─── Particle ocean (BufferGeometry, custom shader) ──────────
+    // 100 × 100 grid → 10,000 particles. Wave equation runs in vertex
+    // shader so colour and position are GPU-resident. Per-band gain
+    // contributions are summed from a uniform array, so when an EQ
+    // bar moves the wave's local amplitude moves with it.
+    const GRID_X = 110, GRID_Z = 100;
+    const SPACING = 0.32;
+    const positions = new Float32Array(GRID_X * GRID_Z * 3);
+    const aRandom   = new Float32Array(GRID_X * GRID_Z);   // per-particle phase
+    const aOutlier  = new Float32Array(GRID_X * GRID_Z);   // 0 or 1
+    let i3 = 0, i1 = 0;
+    for (let zi = 0; zi < GRID_Z; zi++) {
+      for (let xi = 0; xi < GRID_X; xi++) {
+        const x = (xi - (GRID_X - 1) / 2) * SPACING;
+        const z = (zi - (GRID_Z - 1) / 2) * SPACING;
+        positions[i3++] = x;
+        positions[i3++] = 0;
+        positions[i3++] = z;
+        aRandom[i1] = Math.random() * Math.PI * 2;
+        aOutlier[i1] = Math.random() < 0.10 ? 1 : 0;
+        i1++;
+      }
+    }
+    const geom = new THREE.BufferGeometry();
+    geom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geom.setAttribute('aRandom',  new THREE.BufferAttribute(aRandom, 1));
+    geom.setAttribute('aOutlier', new THREE.BufferAttribute(aOutlier, 1));
+
+    const uniforms = {
+      uTime:     { value: 0 },
+      uAmp:      { value: 0.42 },
+      uSpeed:    { value: 0.20 },
+      uHue:      { value: 170/360 },
+      uSat:      { value: 0.78 },
+      uReveal:   { value: 0 },           // 0..1 ramps from 0 at start
+      uPointSize:{ value: 2.6 },
+      uBands:    { value: new Float32Array(8) },  // EQ band gains
+      uBandsActive: { value: 0 },        // 0..1 — fades the band influence in/out
+    };
+
+    const vertShader = `
+      precision highp float;
+      uniform float uTime;
+      uniform float uAmp;
+      uniform float uSpeed;
+      uniform float uReveal;
+      uniform float uPointSize;
+      uniform float uBands[8];
+      uniform float uBandsActive;
+      attribute float aRandom;
+      attribute float aOutlier;
+      varying float vHeight;
+      varying float vDistFromCenter;
+      varying float vAlpha;
+
+      void main() {
+        vec3 pos = position;
+        float t = uTime * uSpeed * 3.0;
+
+        // Base wave: two overlapping sinusoids for organic motion
+        float wave =
+            sin(pos.x * 0.55 + pos.z * 0.30 + t + aRandom * 0.4) * 0.55
+          + sin(pos.x * 0.18 - pos.z * 0.42 + t * 0.7) * 0.45;
+
+        // EQ-band influence: each band biases a horizontal X region
+        float bandSum = 0.0;
+        for (int b = 0; b < 8; b++) {
+          float center = (float(b) - 3.5) * 1.6;
+          float dist = abs(pos.x - center);
+          float falloff = exp(-dist * dist * 0.4);
+          bandSum += uBands[b] * falloff * 0.35;
+        }
+        wave += bandSum * uBandsActive;
+
+        // Outliers ride higher / lower than the surface
+        float outlierY = aOutlier * (sin(uTime * 0.6 + aRandom * 4.0) * 0.4 + 0.2);
+
+        pos.y = wave * uAmp + outlierY;
+
+        // Reveal — particles fade in from underneath
+        float revealMask = smoothstep(0.0, 1.0, uReveal);
+        pos.y *= revealMask;
+
+        vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
+        gl_Position = projectionMatrix * mvPosition;
+
+        // Point size with perspective attenuation
+        gl_PointSize = uPointSize * (260.0 / -mvPosition.z);
+
+        vHeight = wave;
+        vDistFromCenter = length(pos.xz) * 0.04;
+        vAlpha = revealMask * (1.0 - vDistFromCenter * 0.5);
+      }
+    `;
+
+    // HSL → RGB in shader, with subtle per-particle hue jitter
+    const fragShader = `
+      precision highp float;
+      uniform float uHue;
+      uniform float uSat;
+      varying float vHeight;
+      varying float vAlpha;
+
+      vec3 hsl2rgb(vec3 c) {
+        vec3 rgb = clamp(abs(mod(c.x*6.0+vec3(0.0,4.0,2.0),6.0)-3.0)-1.0, 0.0, 1.0);
+        return c.z + c.y * (rgb - 0.5) * (1.0 - abs(2.0*c.z - 1.0));
+      }
+
+      void main() {
+        // Soft circle (additive-friendly)
+        vec2 uv = gl_PointCoord - 0.5;
+        float d = length(uv);
+        if (d > 0.5) discard;
+        float soft = smoothstep(0.5, 0.05, d);
+
+        // Color: hue + small modulation by wave height
+        float l = 0.55 + vHeight * 0.06;
+        vec3 col = hsl2rgb(vec3(uHue, uSat, clamp(l, 0.35, 0.78)));
+
+        // Brighter on crests
+        float crest = smoothstep(0.0, 0.7, vHeight + 0.5);
+        col *= 0.65 + crest * 0.55;
+
+        gl_FragColor = vec4(col, soft * vAlpha * 0.85);
+      }
+    `;
+
+    const mat = new THREE.ShaderMaterial({
+      uniforms, vertexShader: vertShader, fragmentShader: fragShader,
+      transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+    });
+    const ocean = new THREE.Points(geom, mat);
+    scene.add(ocean);
+
+    // ─── EQ bars (8 vertical glowing columns) ────────────────────
+    // Default cruising preset: [-1, 0, 1, 2, 2, 1, 0, -1] (dB-ish, scaled)
+    const BAND_COUNT = 8;
+    const bars = [];
+    const barTargetGains = [-1, 0, 1, 2, 2, 1, 0, -1].map(g => g * 0.18);
+    const barCurrentGains = [...barTargetGains];
+
+    const barGeom = new THREE.BoxGeometry(0.12, 1.0, 0.12);
+    for (let i = 0; i < BAND_COUNT; i++) {
+      const bandMat = new THREE.MeshBasicMaterial({
+        color: 0xffffff, transparent: true, opacity: 0,
+        blending: THREE.AdditiveBlending, depthWrite: false,
+      });
+      const bar = new THREE.Mesh(barGeom, bandMat);
+      // Initial floating position — wide spread, varied depth, varied height
+      bar.position.set(
+        (i - 3.5) * 1.4,                 // x: spread across
+        0.6 + (Math.random() - 0.5) * 0.4,  // y: float
+        (Math.random() - 0.5) * 1.5,        // z: varied depth
+      );
+      bar.rotation.x = (Math.random() - 0.5) * 0.15;
+      bar.rotation.z = (Math.random() - 0.5) * 0.15;
+      bar.userData.basePos = bar.position.clone();
+      bar.userData.targetPos = new THREE.Vector3(
+        (i - 3.5) * 0.32,    // tighter spacing inside the card
+        0.55,
+        0.0,
+      );
+      bar.scale.y = 0.001;   // start invisible
+      scene.add(bar);
+      bars.push(bar);
+    }
+
+    // ─── Glass card (frame + face) ───────────────────────────────
+    // Subtle translucent plane that materializes around the bars.
+    const cardGroup = new THREE.Group();
+    const cardW = 3.2, cardH = 1.7;
+    const cardFaceMat = new THREE.MeshBasicMaterial({
+      color: 0xffffff, transparent: true, opacity: 0,
+      depthWrite: false, blending: THREE.NormalBlending,
+    });
+    const cardFace = new THREE.Mesh(new THREE.PlaneGeometry(cardW, cardH), cardFaceMat);
+    cardFace.position.set(0, 0.55, -0.06);
+    cardGroup.add(cardFace);
+
+    // Frame edges — thin lines built as 4 boxes for hairline look
+    const edgeMat = new THREE.MeshBasicMaterial({
+      color: 0xffffff, transparent: true, opacity: 0,
+      blending: THREE.AdditiveBlending, depthWrite: false,
+    });
+    const edgeThick = 0.018;
+    const eT = new THREE.Mesh(new THREE.BoxGeometry(cardW, edgeThick, edgeThick), edgeMat);
+    const eB = new THREE.Mesh(new THREE.BoxGeometry(cardW, edgeThick, edgeThick), edgeMat);
+    const eL = new THREE.Mesh(new THREE.BoxGeometry(edgeThick, cardH, edgeThick), edgeMat);
+    const eR = new THREE.Mesh(new THREE.BoxGeometry(edgeThick, cardH, edgeThick), edgeMat);
+    eT.position.set(0, 0.55 + cardH/2, -0.05);
+    eB.position.set(0, 0.55 - cardH/2, -0.05);
+    eL.position.set(-cardW/2, 0.55, -0.05);
+    eR.position.set( cardW/2, 0.55, -0.05);
+    cardGroup.add(eT, eB, eL, eR);
+
+    // Tiny label dots underneath bars (frequency labels — abstract)
+    const labelDots = [];
+    for (let i = 0; i < BAND_COUNT; i++) {
+      const m = new THREE.Mesh(
+        new THREE.SphereGeometry(0.018, 8, 8),
+        new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0 })
+      );
+      m.position.set((i - 3.5) * 0.32, -0.10, -0.03);
+      cardGroup.add(m);
+      labelDots.push(m);
+    }
+    cardGroup.visible = true;
+    cardGroup.position.set(0, 0, 0);
+    scene.add(cardGroup);
+
+    // ─── Camera shot keyframes ───────────────────────────────────
+    // Each shot = { from, to, fromLook, toLook, duration, ease, fov? }.
+    // Smoothstep ease for "earned" moves; instant cuts between shots.
+    function ease(t) { return t * t * (3 - 2 * t); } // smoothstep
+    function easeInOut(t) {
+      return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+    }
+
+    const SHOTS = [
+      // SHOT 1 · God's-eye descend (0–3 s)
+      {
+        t0: 0, t1: 3,
+        from:     new THREE.Vector3(0, 14,  0.5),
+        to:       new THREE.Vector3(0,  6,  6),
+        fromLook: new THREE.Vector3(0,  0,  0),
+        toLook:   new THREE.Vector3(0,  0.3, 0),
+        fov: 38, ease: easeInOut,
+        moodTarget: 'cruising', bandsActive: 0, letterbox: true,
+      },
+      // SHOT 2 · Horizon dolly + color shift cruising → locked (3–6 s)
+      {
+        t0: 3, t1: 6,
+        from:     new THREE.Vector3(-7, 1.4, 6),
+        to:       new THREE.Vector3( 7, 1.4, 6),
+        fromLook: new THREE.Vector3(0,  0.5, 0),
+        toLook:   new THREE.Vector3(0,  0.5, 0),
+        fov: 32, ease: easeInOut,
+        moodTarget: 'locked', bandsActive: 0,
+      },
+      // SHOT 3 · Bars materialize floating · drift magenta (6–9 s)
+      {
+        t0: 6, t1: 9,
+        from:     new THREE.Vector3(0,  1.5, 5.0),
+        to:       new THREE.Vector3(0,  1.4, 4.6),
+        fromLook: new THREE.Vector3(0,  0.7, 0),
+        toLook:   new THREE.Vector3(0,  0.7, 0),
+        fov: 42, ease: easeInOut,
+        moodTarget: 'drift', bandsActive: 0,
+      },
+      // SHOT 4 · Bars converge to card · wave responds (9–12 s)
+      {
+        t0: 9, t1: 12,
+        from:     new THREE.Vector3(0,  1.4, 4.6),
+        to:       new THREE.Vector3(1.5, 1.6, 4.0),
+        fromLook: new THREE.Vector3(0,  0.55, 0),
+        toLook:   new THREE.Vector3(0,  0.55, 0),
+        fov: 38, ease: easeInOut,
+        moodTarget: 'locked', bandsActive: 1,
+      },
+      // SHOT 5 · Pull back, wordmark resolves (12–15 s)
+      {
+        t0: 12, t1: 15,
+        from:     new THREE.Vector3(1.5, 1.6, 4.0),
+        to:       new THREE.Vector3(0,   2.4, 7.5),
+        fromLook: new THREE.Vector3(0,  0.55, 0),
+        toLook:   new THREE.Vector3(0,  0.40, 0),
+        fov: 36, ease: easeInOut,
+        moodTarget: 'cruising', bandsActive: 1, wordmark: true,
+      },
+    ];
+
+    // ─── Choreography state ──────────────────────────────────────
+    let t0 = 0;
+    let lastFrameAt = 0;
+    let currentShotIdx = -1;
+    let bandsActiveTarget = 0;
+    let bandsActiveCurrent = 0;
+
+    function startShot(idx, now) {
+      const s = SHOTS[idx];
+      // Hard cut visualization: brief veil flash on cuts (not on first shot)
+      if (idx > 0) {
+        veil.style.transition = 'opacity 0.18s ease-out';
+        veil.style.opacity = '1';
+        setTimeout(() => {
+          veil.style.transition = 'opacity 0.42s cubic-bezier(0.22,1,0.36,1)';
+          veil.style.opacity = '0';
+        }, 90);
+      } else {
+        // Shot 1 — fade up from total black slowly
+        veil.style.transition = 'opacity 1.4s cubic-bezier(0.22,1,0.36,1)';
+        veil.style.opacity = '0';
+      }
+      camera.fov = s.fov;
+      camera.updateProjectionMatrix();
+      moodState.target = { ...MOODS[s.moodTarget] };
+      bandsActiveTarget = s.bandsActive;
+      stage.dataset.letterbox = s.letterbox ? 'true' : 'false';
+      // Shot 4 — change a couple of bars dramatically while we watch
+      if (idx === 3) {
+        setTimeout(() => {
+          barTargetGains[3] =  9 * 0.18;   // mid-low frequency boost
+        }, 800);
+        setTimeout(() => {
+          barTargetGains[6] = -6 * 0.18;   // high frequency cut
+        }, 1700);
+      }
+      // Reset bars for Shot 1–2
+      if (idx <= 1) {
+        for (let i = 0; i < BAND_COUNT; i++) {
+          barTargetGains[i] = [-1, 0, 1, 2, 2, 1, 0, -1][i] * 0.18;
+        }
+      }
+      // Shot 5 — wordmark
+      if (s.wordmark) {
+        setTimeout(() => {
+          word.style.opacity = '1';
+          word.style.letterSpacing = '0.34em';
+        }, 350);
+        setTimeout(() => {
+          tagline.style.opacity = '1';
+        }, 1100);
+        setTimeout(() => {
+          controls.dataset.show = 'true';
+        }, 2400);
+      }
+    }
+
+    function updateCamera(t) {
+      // Find which shot we're in
+      let shotIdx = SHOTS.length - 1;
+      for (let i = 0; i < SHOTS.length; i++) {
+        if (t >= SHOTS[i].t0 && t < SHOTS[i].t1) { shotIdx = i; break; }
+      }
+      if (shotIdx !== currentShotIdx) {
+        currentShotIdx = shotIdx;
+        startShot(shotIdx, t);
+      }
+      const s = SHOTS[shotIdx];
+      const local = (t - s.t0) / (s.t1 - s.t0);
+      const k = s.ease(Math.max(0, Math.min(1, local)));
+      camera.position.lerpVectors(s.from, s.to, k);
+      const look = new THREE.Vector3().lerpVectors(s.fromLook, s.toLook, k);
+      camera.lookAt(look);
+    }
+
+    function updateBars(dt) {
+      // Lerp current to target gain
+      const tau = 0.35;
+      const k = 1 - Math.exp(-dt / tau);
+      for (let i = 0; i < BAND_COUNT; i++) {
+        barCurrentGains[i] = lerp(barCurrentGains[i], barTargetGains[i], k);
+        // Bar height + Y offset — base height 0.7, plus gain
+        const baseH = 0.7;
+        const gain = barCurrentGains[i];
+        const h = baseH + gain * 1.4;
+        bars[i].scale.y = Math.max(0.06, h);
+        bars[i].position.y = bars[i].userData.targetPos.y + gain * 0.7;
+        // Color from mood
+        const c = new THREE.Color();
+        c.setHSL(moodState.current.h, moodState.current.s, 0.62);
+        bars[i].material.color.copy(c);
+      }
+      // Bars converge from floating positions to card-fixed positions during Shot 4
+      const shot = SHOTS[currentShotIdx];
+      if (currentShotIdx >= 3) {
+        const conv = Math.min(1, (state.time - SHOTS[3].t0) / 1.4);
+        const e = easeInOut(conv);
+        for (let i = 0; i < BAND_COUNT; i++) {
+          const target = bars[i].userData.targetPos;
+          const base = bars[i].userData.basePos;
+          bars[i].position.x = lerp(base.x, target.x, e);
+          bars[i].position.z = lerp(base.z, target.z, e);
+          bars[i].rotation.x *= 0.92;
+          bars[i].rotation.z *= 0.92;
+          bars[i].material.opacity = lerp(bars[i].material.opacity, 1, k);
+        }
+      } else if (currentShotIdx === 2) {
+        // Shot 3 — bars fade in with stagger from invisible
+        const localT = state.time - SHOTS[2].t0;
+        for (let i = 0; i < BAND_COUNT; i++) {
+          const stagger = i * 0.10;
+          const fade = Math.max(0, Math.min(1, (localT - 0.4 - stagger) / 0.7));
+          bars[i].material.opacity = fade * 0.85;
+        }
+      } else {
+        // Hide bars in Shot 1–2
+        for (let i = 0; i < BAND_COUNT; i++) {
+          bars[i].material.opacity = lerp(bars[i].material.opacity, 0, k);
+        }
+      }
+    }
+
+    function updateCard(dt) {
+      const k = 1 - Math.exp(-dt / 0.45);
+      let targetEdge = 0, targetFace = 0, targetDots = 0;
+      if (currentShotIdx === 3) {
+        const localT = state.time - SHOTS[3].t0;
+        targetEdge = Math.min(1, Math.max(0, (localT - 1.0) / 1.0)) * 0.85;
+        targetFace = Math.min(1, Math.max(0, (localT - 1.4) / 1.2)) * 0.06;
+        targetDots = Math.min(1, Math.max(0, (localT - 1.6) / 0.8)) * 0.6;
+      } else if (currentShotIdx === 4) {
+        targetEdge = 0.85; targetFace = 0.06; targetDots = 0.6;
+      } else {
+        targetEdge = 0; targetFace = 0; targetDots = 0;
+      }
+      edgeMat.opacity = lerp(edgeMat.opacity, targetEdge, k);
+      cardFaceMat.opacity = lerp(cardFaceMat.opacity, targetFace, k);
+      labelDots.forEach(d => d.material.opacity = lerp(d.material.opacity, targetDots, k));
+    }
+
+    // ─── Render loop ─────────────────────────────────────────────
+    const state = { time: 0, paused: false };
+    function frame(now) {
+      if (!t0) { t0 = now; lastFrameAt = now; }
+      const dt = Math.min(0.05, (now - lastFrameAt) / 1000 || 0.016);
+      lastFrameAt = now;
+      if (!state.paused) state.time = (now - t0) / 1000;
+
+      lerpMood(dt);
+      bandsActiveCurrent = lerp(bandsActiveCurrent, bandsActiveTarget, 1 - Math.exp(-dt / 0.4));
+
+      // Push uniforms
+      uniforms.uTime.value  = state.time;
+      uniforms.uAmp.value   = moodState.current.amp;
+      uniforms.uSpeed.value = moodState.current.spd;
+      uniforms.uHue.value   = moodState.current.h;
+      uniforms.uSat.value   = moodState.current.s;
+      uniforms.uReveal.value = Math.min(1, state.time / 1.8);
+      uniforms.uBandsActive.value = bandsActiveCurrent;
+      for (let i = 0; i < 8; i++) uniforms.uBands.value[i] = barCurrentGains[i];
+
+      updateCamera(state.time);
+      updateBars(dt);
+      updateCard(dt);
+
+      // HUD readout
+      if (hudEl.dataset.show === 'true') {
+        hudEl.textContent =
+          `SHOT ${currentShotIdx + 1} · t=${state.time.toFixed(2)}s  ` +
+          `mood h=${(moodState.current.h * 360).toFixed(0)}° amp=${moodState.current.amp.toFixed(2)}  ` +
+          `bands=${bandsActiveCurrent.toFixed(2)}`;
+      }
+
+      renderer.render(scene, camera);
+
+      // End: when t > 16 s, hold final frame
+      if (state.time > 16) state.time = 16; // freeze at the end
+      requestAnimationFrame(frame);
+    }
+
+    // ─── Reset / replay ──────────────────────────────────────────
+    function reset() {
+      t0 = 0;
+      currentShotIdx = -1;
+      moodState.current = { ...MOODS.cruising };
+      moodState.target  = { ...MOODS.cruising };
+      bandsActiveCurrent = 0;
+      bandsActiveTarget = 0;
+      for (let i = 0; i < BAND_COUNT; i++) {
+        barTargetGains[i]  = [-1, 0, 1, 2, 2, 1, 0, -1][i] * 0.18;
+        barCurrentGains[i] = barTargetGains[i];
+        bars[i].material.opacity = 0;
+        // Also reset rotation so re-replay floats the bars again
+        bars[i].rotation.x = (Math.random() - 0.5) * 0.15;
+        bars[i].rotation.z = (Math.random() - 0.5) * 0.15;
+      }
+      edgeMat.opacity = 0;
+      cardFaceMat.opacity = 0;
+      labelDots.forEach(d => d.material.opacity = 0);
+      veil.style.transition = 'none';
+      veil.style.opacity = '1';
+      word.style.transition = 'none';
+      word.style.opacity = '0';
+      word.style.letterSpacing = '0.50em';
+      tagline.style.opacity = '0';
+      controls.dataset.show = 'false';
+      // Force reflow so transitions re-engage
+      void veil.offsetWidth;
+      veil.style.transition = 'opacity 1.4s cubic-bezier(0.22,1,0.36,1)';
+      word.style.transition = 'opacity 1.2s cubic-bezier(0.22,1,0.36,1), letter-spacing 1.6s cubic-bezier(0.22,1,0.36,1)';
+    }
+
+    // Show controls on page load (just the "Replay" + HUD toggle)
+    setTimeout(() => { controls.dataset.show = 'true'; }, 500);
+
+    replayBt.addEventListener('click', reset);
+    hudBt.addEventListener('click', () => {
+      hudEl.dataset.show = hudEl.dataset.show === 'true' ? 'false' : 'true';
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'r' || e.key === 'R') reset();
+      if (e.key === 'h' || e.key === 'H') hudBt.click();
+      if (e.key === 'f' || e.key === 'F') {
+        if (!document.fullscreenElement) document.documentElement.requestFullscreen();
+        else document.exitFullscreen();
+      }
+    });
+
+    requestAnimationFrame(frame);
+  })();
+  </script>
+</body>
+</html>

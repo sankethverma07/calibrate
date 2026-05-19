@@ -35,6 +35,17 @@ contextBridge.exposeInMainWorld('moodBridge', {
     isMaximized:    () => ipcRenderer.invoke('window:is-maximized'),
   },
 
+  // ── Structured log (renderer → main, written to userData/logs) ──
+  // Use sparingly: each call is an IPC round-trip. Call signature:
+  //   moodBridge.log.info('eq:band-changed', { band: '1k', dB: 3 });
+  // Scope is the first argument so logs can be filtered by component.
+  log: {
+    info:  (scope, message, meta) => ipcRenderer.invoke('log:write', { level: 'info',  scope, message, meta }),
+    warn:  (scope, message, meta) => ipcRenderer.invoke('log:write', { level: 'warn',  scope, message, meta }),
+    error: (scope, message, meta) => ipcRenderer.invoke('log:write', { level: 'error', scope, message, meta }),
+    debug: (scope, message, meta) => ipcRenderer.invoke('log:write', { level: 'debug', scope, message, meta }),
+  },
+
   // ── Global input — events fired even when Calibrate isn't focused ──
   // (Requires uiohook-napi installed in electron/.)
   globalInput: {
