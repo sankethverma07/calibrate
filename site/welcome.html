@@ -310,29 +310,29 @@
 
       <section class="section download-block" id="download">
         <h2>Get Calibrate</h2>
-        <p>The desktop app is the real product — it's where system-wide EQ, global keystroke capture, and Now Playing detection live. Download the latest build from GitHub Releases:</p>
+        <p>The desktop app is the real product — it's where system-wide EQ, global keystroke capture, and Now Playing detection live. Download the latest Windows build from GitHub Releases:</p>
         <div class="ctas" style="margin-bottom: 14px">
-          <!-- These hrefs are the *fallback* — they always resolve to the
-               GitHub "latest release" redirector even if the API call below
-               fails. On a successful API fetch they're rewritten in-place
-               to point straight at the matched asset (.exe for Windows,
-               .dmg for macOS, .AppImage for Linux), so the user clicks one
-               link and the right file starts downloading. -->
+          <!-- These hrefs are the *fallback* — they resolve to the GitHub
+               "latest release" redirector even if the API call below fails.
+               On a successful API fetch the primary button is rewritten
+               in-place to point straight at the matched .exe asset. -->
           <a class="cta cta-primary"
              id="dl-primary"
-             data-platform="auto"
              href="https://github.com/sankethverma07/calibrate/releases/latest"
-             target="_blank" rel="noopener">Download Calibrate ↓</a>
+             target="_blank" rel="noopener">Download for Windows ↓</a>
           <a class="cta"
              id="dl-all"
              href="https://github.com/sankethverma07/calibrate/releases/latest"
-             target="_blank" rel="noopener">All platforms / older versions</a>
+             target="_blank" rel="noopener">Older versions</a>
           <a class="cta" href="https://github.com/sankethverma07/calibrate#install" target="_blank" rel="noopener">Build from source</a>
         </div>
+        <p class="cta-note">
+          Currently Windows-only. macOS &amp; Linux on the roadmap (the EQ engine, Equalizer APO, is Windows-only — porting requires a different audio routing approach on those platforms).
+        </p>
         <ul id="dl-meta">
           <li id="dl-version">Resolving latest release…</li>
-          <li>Windows 10 / 11 (x64) · macOS 12+ · Linux x64 (AppImage)</li>
-          <li>Requires <a href="https://sourceforge.net/projects/equalizerapo/" target="_blank" rel="noopener">Equalizer APO</a> on Windows for system-wide EQ routing</li>
+          <li>Windows 10 / 11 (x64)</li>
+          <li>Requires <a href="https://sourceforge.net/projects/equalizerapo/" target="_blank" rel="noopener">Equalizer APO</a> installed and routed through your output device</li>
           <li>~120 MB install · Electron-based · single-window</li>
         </ul>
       </section>
@@ -341,43 +341,27 @@
         // ───────────────────────────────────────────────────────────────
         // Dynamic download link — pulls the latest release from the
         // GitHub Releases API at page load and rewrites the primary
-        // download CTA to the matching asset for the visitor's OS.
+        // download CTA to point straight at the Windows .exe asset.
+        //
+        // Windows-only intentionally: Calibrate's audio engine (Equalizer
+        // APO) and Now Playing detection (PowerShell + Windows MTC API)
+        // are Windows-specific, so the only artifact CI ships is the
+        // .exe installer. macOS / Linux are on the roadmap as separate
+        // work — shipping installers that LAUNCH but silently fail to
+        // route audio would be worse than no download at all.
         //
         // Why client-side (not build-time)?
-        //  · The marketing site is a flat Vercel deployment with no
-        //    build step beyond `cp -r site dist`. A build-time approach
-        //    would require Vercel cron + a re-deploy on every release,
-        //    which defeats the point.
-        //  · The GH API is CORS-friendly and rate-limits per IP (60/hr),
-        //    which is well within marketing-page traffic patterns. The
-        //    response is also cacheable so refreshes stay snappy.
-        //  · If the fetch fails (offline, rate-limited, repo private),
-        //    the link falls back to /releases/latest on GitHub which
-        //    works as a redirector — no broken state.
+        //  · Vercel deployment is flat-static, no build step.
+        //  · GitHub API allows 60 unauth requests/hr per IP — well within
+        //    marketing-page traffic patterns.
+        //  · On API failure, the link falls back to /releases/latest on
+        //    GitHub which works as a redirector — no broken state.
         // ───────────────────────────────────────────────────────────────
         (function wireLatestRelease() {
           var REPO = 'sankethverma07/calibrate';
           var btn  = document.getElementById('dl-primary');
           var ver  = document.getElementById('dl-version');
           if (!btn || !ver) return;
-
-          // Detect OS so we can pick the right asset.
-          var ua = navigator.userAgent || '';
-          var platform = /windows/i.test(ua) ? 'win'
-                       : /mac/i.test(ua)     ? 'mac'
-                       : /linux/i.test(ua)   ? 'linux'
-                       : 'win'; // Default to Windows — primary target.
-
-          // Asset matchers per platform. electron-builder NSIS / DMG /
-          // AppImage names typically include the platform string or
-          // file extension, so we match on extension first (most reliable)
-          // and fall back to name substring.
-          var matchers = {
-            win:   function (n) { return /\.exe$/i.test(n); },
-            mac:   function (n) { return /\.dmg$/i.test(n); },
-            linux: function (n) { return /\.AppImage$/i.test(n); },
-          };
-          var labels = { win: 'Windows', mac: 'macOS', linux: 'Linux' };
 
           fetch('https://api.github.com/repos/' + REPO + '/releases/latest', {
             headers: { 'Accept': 'application/vnd.github+json' },
@@ -387,35 +371,30 @@
               return r.json();
             })
             .then(function (release) {
-              var tag    = release.tag_name || 'latest';
-              var date   = release.published_at
+              var tag  = release.tag_name || 'latest';
+              var date = release.published_at
                 ? new Date(release.published_at).toLocaleDateString(undefined, {
                     year: 'numeric', month: 'short', day: 'numeric'
                   })
                 : null;
 
-              // Find the matching asset for this OS.
+              // Find the .exe asset (the only installer we publish).
               var assets = Array.isArray(release.assets) ? release.assets : [];
-              var pick   = assets.find(function (a) {
-                return a && a.name && matchers[platform] && matchers[platform](a.name);
+              var exe    = assets.find(function (a) {
+                return a && a.name && /\.exe$/i.test(a.name);
               });
 
-              if (pick && pick.browser_download_url) {
-                btn.href = pick.browser_download_url;
-                btn.textContent = 'Download for ' + labels[platform] + ' · ' + tag + ' ↓';
+              if (exe && exe.browser_download_url) {
+                btn.href = exe.browser_download_url;
+                btn.textContent = 'Download for Windows · ' + tag + ' ↓';
               } else {
-                // No matching asset — keep fallback href, just update label
-                // so users know which version they'll get from the redirector.
-                btn.textContent = 'Download Calibrate · ' + tag + ' ↓';
+                // No .exe found — keep fallback href, just update label.
+                btn.textContent = 'Download for Windows · ' + tag + ' ↓';
               }
 
               ver.textContent = 'Latest release: ' + tag + (date ? ' · ' + date : '');
             })
             .catch(function (err) {
-              // API failed — leave the fallback link in place. Log to console
-              // so a maintainer noticing a stuck label can debug it; users
-              // see the original "Resolving…" line replaced with a graceful
-              // pointer back to the releases page.
               if (window && window.console) {
                 console.warn('[dl] could not resolve latest release:', err);
               }

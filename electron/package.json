@@ -1,6 +1,6 @@
 {
   "name": "calibrate-desktop",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Calibrate — Closed-loop biofeedback EQ that reads your typing rhythm + mouse precision to retune system audio in real time.",
   "author": {
     "name":  "Sanketh Verma",

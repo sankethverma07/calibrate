@@ -73,7 +73,7 @@ echo.
 echo --- commit ---
 git diff --cached --quiet
 if errorlevel 1 (
-  git commit -m "chore: ship %TAG% — pill grid, stats slide, CI release, logger"
+  git commit -m "chore: ship %TAG%"
   if errorlevel 1 (
     echo ERROR: `git commit` failed. Aborting.
     pause & exit /b 1

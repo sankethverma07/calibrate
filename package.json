@@ -1,6 +1,6 @@
 {
   "name": "calibrate",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Calibrate — Closed-loop biofeedback EQ for your computer's audio. Reads your typing rhythm and mouse precision, infers focus state, retunes system EQ.",
   "type": "module",
   "license": "MIT",
